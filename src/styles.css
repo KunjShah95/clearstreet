@@ -1,0 +1,672 @@
+@import "tailwindcss";
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Clear Street Night — design system
+ *
+ * Bold electric-indigo canvas, white editorial serif headlines, pill controls.
+ * Reyhan (display) is proprietary; Instrument Serif is used as the closest
+ * editorial substitute available on Google Fonts. Labels use Inter.
+ */
+
+@theme inline {
+  --font-display: "Instrument Serif", "Reyhan", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --spacing-cs-xs: 8px;
+  --spacing-cs-sm: 16px;
+  --spacing-cs-md: 26px;
+  --spacing-cs-lg: 42px;
+  --spacing-cs-xl: 68px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-tertiary: var(--tertiary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-on-surface: var(--on-surface);
+  --color-overlay: var(--overlay);
+  --color-ink: var(--ink);
+}
+
+:root {
+  /* Clear Street palette — bright indigo/blue theme */
+  --primary: #2e21de;
+  --primary-foreground: #ffffff;
+  --secondary: #01001f;
+  --secondary-foreground: #ffffff;
+  --tertiary: #9ca3af;
+  --surface: #ffffff;
+  --on-surface: #01001f;
+  --ink: #01001f;
+
+  --background: #2e21de;
+  --foreground: #ffffff;
+
+  --card: #2e21de;
+  --card-foreground: #ffffff;
+  --popover: #ffffff;
+  --popover-foreground: #01001f;
+
+  --muted: #dad7ff;
+  --muted-foreground: #01001f;
+  --accent: #6b4aff;
+  --accent-foreground: #ffffff;
+
+  --destructive: #d64545;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(255, 255, 255, 0.12);
+  --input: #ffffff;
+  --ring: #dad7ff;
+
+  --overlay: rgba(46, 33, 222, 0.85);
+
+  --radius: 8px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-display);
+    font-feature-settings: "kern" on;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: #dad7ff;
+    color: #01001f;
+  }
+}
+
+/* Typography utilities from the spec */
+@utility cs-display {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 8vw, 96px);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+@utility cs-h1 {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5.2vw, 70px);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.028em;
+}
+
+@utility cs-h2 {
+  font-family: var(--font-display);
+  font-size: clamp(34px, 4vw, 57px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+}
+
+@utility cs-h3 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 46px);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+}
+
+@utility cs-h4 {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2.4vw, 38px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+
+@utility cs-body-lg {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.8vw, 30px);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+}
+
+@utility cs-body {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+
+@utility cs-label {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+@utility cs-label-sm {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+
+/* Pill controls */
+@utility cs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 10px 18px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease;
+  cursor: pointer;
+}
+
+@utility cs-btn-primary {
+  background-color: #01001f;
+  color: #ffffff;
+  &:hover {
+    background-color: #0a0940;
+  }
+}
+
+@utility cs-btn-secondary {
+  background-color: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: #ffffff;
+  }
+}
+
+@utility cs-btn-light {
+  background-color: #ffffff;
+  color: #01001f;
+  &:hover {
+    background-color: #dad7ff;
+  }
+}
+
+@utility cs-btn-link {
+  background-color: transparent;
+  color: #ffffff;
+  padding: 0;
+  height: auto;
+  border-radius: 0;
+  &:hover {
+    opacity: 0.75;
+  }
+}
+
+@utility cs-input {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 10px 18px;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  color: #01001f;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  border: 1px solid transparent;
+  outline: none;
+  width: 100%;
+  &::placeholder {
+    color: #374151;
+  }
+  &:focus {
+    border-color: #01001f;
+  }
+}
+
+@utility cs-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+@utility cs-nav-link {
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: #ffffff;
+  transition: background-color 180ms ease;
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+@utility cs-nav-link-active {
+  background-color: #ffffff;
+  color: #01001f;
+  &:hover {
+    background-color: #ffffff;
+  }
+}
+
+@utility cs-card {
+  background-color: #2e21de;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 26px;
+}
+
+@utility cs-surface {
+  background-color: #ffffff;
+  color: #01001f;
+  border-radius: 16px;
+}
+
+@utility cs-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Animations & Visual Effects */
+@keyframes cs-pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.08); }
+}
+
+@keyframes cs-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes cs-marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes cs-roll-vertical {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+.animate-pulse-glow {
+  animation: cs-pulse-glow 8s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: cs-float 6s ease-in-out infinite;
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: cs-marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+.animate-roll-vertical {
+  animation: cs-roll-vertical 24s linear infinite;
+}
+
+.animate-roll-vertical:hover {
+  animation-play-state: paused;
+}
+
+@keyframes studio-rotate-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes studio-rotate-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+.animate-studio-rotate-cw {
+  animation: studio-rotate-cw 60s linear infinite;
+}
+
+.animate-studio-rotate-ccw {
+  animation: studio-rotate-ccw 80s linear infinite;
+}
+
+/* Homepage animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeScaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-scroll-indicator {
+  animation: scrollBounce 1.6s ease-in-out infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(6px); opacity: 1; }
+}
+
+/* Hero entry animations — matching framer-motion's feel */
+@keyframes heroFadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glassmorphic elements */
+.cs-glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cs-glass-dark {
+  background: rgba(1, 0, 31, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cs-card-hover {
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
+}
+
+/* Grid background pattern */
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+/* ── Premium Interactive Effects ───────────────────────────────── */
+
+/* Ambient floating gradient orb — use with cs-ambient-orb on a ::before/after or div */
+@keyframes cs-orb-drift {
+  0%   { transform: translate(0%, 0%) scale(1); }
+  25%  { transform: translate(5%, -8%) scale(1.05); }
+  50%  { transform: translate(-3%, -12%) scale(0.95); }
+  75%  { transform: translate(-8%, -4%) scale(1.02); }
+  100% { transform: translate(0%, 0%) scale(1); }
+}
+
+@keyframes cs-orb-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.35; }
+}
+
+.cs-ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: cs-orb-drift 20s ease-in-out infinite, cs-orb-pulse 8s ease-in-out infinite;
+}
+
+.cs-ambient-orb:nth-child(2) {
+  animation-duration: 25s, 10s;
+  animation-delay: -5s, -2s;
+}
+
+.cs-ambient-orb:nth-child(3) {
+  animation-duration: 18s, 12s;
+  animation-delay: -10s, -4s;
+}
+
+/* Card hover with glow ring — apply .cs-glow-card to interactive cards */
+@keyframes cs-glow-pulse {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+.cs-glow-card {
+  position: relative;
+  isolation: isolate;
+  transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-glow-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(107, 74, 255, 0.4), transparent 50%, rgba(218, 215, 255, 0.2));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.cs-glow-card:hover {
+  transform: translateY(-4px) scale(1.01);
+}
+
+.cs-glow-card:hover::before {
+  opacity: 1;
+}
+
+/* Premium hover lift — for any card that needs a subtle hover effect */
+.cs-hover-lift {
+  transition:
+    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 350ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px -8px rgba(46, 33, 222, 0.3), 0 4px 16px -4px rgba(0, 0, 0, 0.2);
+}
+
+/* Animated underline for links — applies to inline links */
+.cs-link-underline {
+  position: relative;
+  text-decoration: none;
+}
+
+.cs-link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-link-underline:hover::after {
+  transform: scaleX(1);
+}
+
+/* Button press feedback */
+.cs-btn:active {
+  transform: scale(0.97);
+}
+
+.cs-btn.cs-btn-secondary:active,
+.cs-btn.cs-btn-light:active {
+  transform: scale(0.97);
+}
+
+/* Pulse ring for featured CTAs */
+@keyframes cs-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(107, 74, 255, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(107, 74, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(107, 74, 255, 0); }
+}
+
+.cs-pulse-ring {
+  animation: cs-pulse-ring 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Shimmer loading placeholder */
+@keyframes cs-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.cs-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: cs-shimmer 2s ease-in-out infinite;
+}
+
+/* Smooth scroll-triggered fade with parallax feel */
+.cs-parallax-slow {
+  will-change: transform;
+  transition: transform 0.1s linear;
+}
+
+/* Section reveal with subtle upward drift */
+@keyframes cs-reveal-up {
+  from {
+    opacity: 0;
+    clip-path: inset(10% 0 0 0);
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
+  }
+}
+
+.cs-reveal-up {
+  animation: cs-reveal-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Mobile menu slide-in */
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cs-mobile-menu-enter {
+  animation: slideInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* CTA arrow slide on hover */
+.cs-arrow-slide {
+  display: inline-block;
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.group:hover .cs-arrow-slide {
+  transform: translateX(4px);
+}
+
+/* Zone arrow hover effect */
+.cs-zone-arrow {
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-zone-arrow:hover {
+  transform: scale(1.12);
+  border-color: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 20px rgba(107, 74, 255, 0.2);
+}
+
+.cs-zone-arrow:active {
+  transform: scale(0.95);
+}
+
+/* ── Word-by-word text reveal ── */
+@keyframes wordReveal {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.cs-word-reveal {
+  display: inline-block;
+  opacity: 0;
+  animation: wordReveal 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scroll chevron bounce animation */
+.cs-scroll-chevron {
+  opacity: 0;
+  animation:
+    heroFadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+}
+
+.cs-scroll-chevron svg {
+  animation: scrollBounce 1.6s cubic-bezier(0.4, 0, 0.2, 1) 1.5s infinite;
+}
+
+.cs-scroll-chevron span {
+  opacity: 0;
+  animation: heroFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards;
+}
