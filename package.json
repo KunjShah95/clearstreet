@@ -9,7 +9,10 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "images:inventory": "node scripts/migrate-images.mjs",
+    "images:verify": "node scripts/migrate-images.mjs --verify",
+    "images:migrate": "node scripts/migrate-images.mjs --apply"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -16,6 +16,14 @@ dist-ssr
 .nitro
 *.local
 
+# Environment / secrets
+# `.env` was absent here, so a future one would have been committed. This
+# covers the variants too: .env, .env.local, .env.production, .env.*.*
+.env
+.env.*
+!.env.example
+.image-migration/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
