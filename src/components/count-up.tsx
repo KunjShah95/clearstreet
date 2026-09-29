@@ -1,52 +1,80 @@
-import { useEffect, useRef, useState } from "react";
-import { useInView } from "../hooks/use-in-view";
+import { useEffect, useRef } from "react";
+import { useInView, usePrefersReducedMotion } from "../hooks/use-in-view";
 
 /**
  * Animates a numeric value counting up when it scrolls into view.
- * `value` is a display string like "~550M", "$28.4B", "94%" — the
- * leading numeric portion is parsed and tweened, prefix/suffix preserved.
+ *
+ * `value` is a display string like "~550M", "$28.4bn", "94% YoY" — the
+ * leading numeric portion is parsed and tweened, prefix/suffix kept.
+ *
+ * The tween writes straight to the text node. The previous version drove
+ * it through `useState`, which re-rendered the component on all ~60
+ * frames per second; with seven of these inside a marquee that is a
+ * few hundred wasted renders per second during scroll for text that
+ * only ever changes its own `textContent`.
  */
 export function CountUp({ value, duration = 1.4 }: { value: string; duration?: number }) {
   const { ref, inView } = useInView<HTMLSpanElement>({ once: true, margin: "-10% 0px" });
-  const [display, setDisplay] = useState(() => zeroed(value));
+  const nodeRef = useRef<HTMLSpanElement | null>(null);
+  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     if (!inView) return;
-    const match = value.match(/-?\d[\d,.]*/);
-    if (!match) {
-      setDisplay(value);
+
+    const node = nodeRef.current;
+    if (!node) return;
+
+    const parsed = parseDisplay(value);
+
+    if (reduced || !parsed) {
+      node.textContent = value;
       return;
     }
-    const numStr = match[0];
-    const target = parseFloat(numStr.replace(/,/g, ""));
-    const decimals = numStr.includes(".") ? numStr.split(".")[1].length : 0;
-    const prefix = value.slice(0, match.index);
-    const suffix = value.slice((match.index ?? 0) + numStr.length);
 
-    let raf: number;
+    const { target, decimals, prefix, suffix } = parsed;
+    let raf = 0;
     const start = performance.now();
+
     const tick = (now: number) => {
-      const elapsed = (now - start) / 1000;
-      const t = Math.min(1, elapsed / duration);
+      const t = Math.min(1, (now - start) / 1000 / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      const current = target * eased;
-      setDisplay(`${prefix}${current.toFixed(decimals)}${suffix}`);
-      if (t < 1) raf = requestAnimationFrame(tick);
-      else setDisplay(value);
+      node.textContent = `${prefix}${(target * eased).toFixed(decimals)}${suffix}`;
+      if (t < 1) {
+        raf = requestAnimationFrame(tick);
+      } else {
+        node.textContent = value;
+      }
     };
+
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [inView, value, duration]);
+  }, [inView, value, duration, reduced]);
 
-  return <span ref={ref}>{display}</span>;
+  return (
+    <span
+      ref={(el) => {
+        ref.current = el;
+        nodeRef.current = el;
+      }}
+    >
+      {zeroed(value)}
+    </span>
+  );
 }
 
-function zeroed(value: string): string {
+function parseDisplay(value: string) {
   const match = value.match(/-?\d[\d,.]*/);
-  if (!match) return value;
+  if (!match) return null;
   const numStr = match[0];
+  const target = parseFloat(numStr.replace(/,/g, ""));
   const decimals = numStr.includes(".") ? numStr.split(".")[1].length : 0;
   const prefix = value.slice(0, match.index);
   const suffix = value.slice((match.index ?? 0) + numStr.length);
-  return `${prefix}${(0).toFixed(decimals)}${suffix}`;
+  return { target, decimals, prefix, suffix };
+}
+
+function zeroed(value: string): string {
+  const parsed = parseDisplay(value);
+  if (!parsed) return value;
+  return `${parsed.prefix}${(0).toFixed(parsed.decimals)}${parsed.suffix}`;
 }

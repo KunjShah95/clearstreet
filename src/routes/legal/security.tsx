@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { FadeInSection } from "../../components/fade-in-section";
-import { ArrowLeft, Shield, Lock, Eye, Server, Key, UserCheck } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { FadeInSection, Stagger, StaggerItem } from "../../components/fade-in-section";
+import { LegalHero } from "../../components/legal-page";
+import { Lock, Server, Eye, Key, UserCheck, Shield } from "lucide-react";
 
 export const Route = createFileRoute("/legal/security")({
   head: () => ({
@@ -25,31 +26,31 @@ const securityItems = [
   },
   {
     icon: Server,
-    title: "Infrastructure Security",
+    title: "Infrastructure security",
     description:
       "Our cloud-native infrastructure runs on SOC 2-compliant providers with redundant data centers, network segmentation, and 24/7 monitoring. Access is restricted by least-privilege principles.",
   },
   {
     icon: Eye,
-    title: "Monitoring & Detection",
+    title: "Monitoring & detection",
     description:
       "We operate a 24/7 security operations center (SOC) with advanced threat detection, behavioral analytics, and incident response capabilities. All systems are continuously monitored for anomalous activity.",
   },
   {
     icon: Key,
-    title: "Access Control",
+    title: "Access control",
     description:
       "Multi-factor authentication is required for all system access. Role-based access controls (RBAC), privileged access management (PAM), and just-in-time (JIT) access ensure users have only the permissions they need.",
   },
   {
     icon: UserCheck,
-    title: "Vendor & Third-Party Risk",
+    title: "Vendor & third-party risk",
     description:
       "All third-party vendors undergo rigorous security assessments before engagement. We continuously monitor vendor security posture and conduct regular reviews.",
   },
   {
     icon: Shield,
-    title: "Compliance & Audits",
+    title: "Compliance & audits",
     description:
       "We maintain SOC 2 Type II certification and comply with FINRA, SEC, and applicable regulatory requirements. Regular penetration testing and vulnerability assessments are conducted by independent firms.",
   },
@@ -57,58 +58,45 @@ const securityItems = [
 
 export function Security() {
   return (
-    <div className="px-4 sm:px-8">
-      <section className="relative overflow-hidden pb-20 pt-28 sm:pt-36">
-        <FadeInSection>
-          <div className="mx-auto max-w-7xl">
-            <Link to="/" className="cs-label-sm mb-8 inline-flex items-center gap-1 text-white/40 hover:text-white/60 transition-colors">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to home
-            </Link>
-            <h1 className="cs-display mt-4 text-white">Security</h1>
-            <p className="cs-body-lg mt-4 max-w-3xl text-white/60">
-              Security is foundational to everything we build at Clear Street. Our cloud-native 
-              platform is designed to protect client data and assets through defense-in-depth 
-              architecture, continuous monitoring, and rigorous compliance.
-            </p>
-          </div>
-        </FadeInSection>
-      </section>
+    <>
+      <LegalHero
+        title="Security"
+        lede="Security is foundational to everything we build at Clear Street. Our cloud-native platform is designed to protect client data and assets through defense-in-depth architecture, continuous monitoring, and rigorous compliance."
+      />
 
-      <section className="mx-auto max-w-7xl pb-10">
-        <FadeInSection>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {securityItems.map((item, i) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={i}
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all hover:border-white/20"
-                >
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10">
-                    <Icon className="h-5 w-5 text-indigo-400" />
+      <FadeInSection className="mx-auto mt-24 max-w-7xl px-4 sm:px-8">
+        <Stagger className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {securityItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <StaggerItem key={item.title}>
+                <div className="h-full rounded-2xl border border-white/10 bg-[color:var(--fill-brand-subtle)] p-6 transition-colors duration-300 hover:border-[color:var(--rule-brand-strong)] hover:bg-white/[0.06]">
+                  <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#DAD7FF]">
+                    <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="cs-h5 mb-2 text-white">{item.title}</h3>
-                  <p className="cs-body-sm text-white/60">{item.description}</p>
+                  <p className="cs-body-sm text-[color:var(--on-brand)]">{item.description}</p>
                 </div>
-              );
-            })}
-          </div>
-        </FadeInSection>
-      </section>
+              </StaggerItem>
+            );
+          })}
+        </Stagger>
+      </FadeInSection>
 
-      <section className="mx-auto max-w-3xl pb-24">
-        <FadeInSection>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-            <h2 className="cs-h3 mb-4 text-white">Report a Vulnerability</h2>
-            <p className="cs-body leading-relaxed text-white/60">
-              We welcome input from the security research community. If you believe you have 
-              discovered a vulnerability in our platform or services, please report it 
-              responsibly to security@clearstreet.io. We are committed to reviewing and 
-              addressing all credible reports promptly.
-            </p>
-          </div>
-        </FadeInSection>
-      </section>
-    </div>
+      <FadeInSection className="mx-auto mt-24 max-w-3xl px-4 sm:px-8">
+        <div className="rounded-2xl border border-white/10 bg-[color:var(--fill-brand-subtle)] p-8">
+          <h2 className="cs-h3 mb-4 text-white">Report a vulnerability</h2>
+          <p className="cs-body leading-relaxed text-[color:var(--on-brand)]">
+            We welcome input from the security research community. If you believe you have
+            discovered a vulnerability in our platform or services, please report it responsibly
+            to{" "}
+            <a href="mailto:security@clearstreet.io" className="cs-link-underline">
+              security@clearstreet.io
+            </a>
+            . We are committed to reviewing and addressing all credible reports promptly.
+          </p>
+        </div>
+      </FadeInSection>
+    </>
   );
 }

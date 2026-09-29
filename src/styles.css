@@ -89,6 +89,31 @@
   --overlay: rgba(46, 33, 222, 0.85);
 
   --radius: 8px;
+
+  /* ------------------------------------------------------------------ */
+  /*  On-brand text tiers                                                */
+  /*  Measured against --background #2e21de (relative luminance 0.0694). */
+  /*  Only tiers that clear WCAG AA for their intended size are exposed,  */
+  /*  so `text-white/40`-style ad-hoc opacities can't creep back in.     */
+  /*    strong  0.95 -> 12.0:1   headings, hero copy                     */
+  /*    base    0.78 ->  6.1:1   body copy                             */
+  /*    muted   0.70 ->  4.9:1   labels, captions, secondary meta       */
+  /*  Decorative opacities (/12-/30) stay for borders, rules and dots    */
+  /*  only, never for text.                                              */
+  /* ------------------------------------------------------------------ */
+  --on-brand-strong: rgba(255, 255, 255, 0.95);
+  --on-brand: rgba(255, 255, 255, 0.78);
+  --on-brand-muted: rgba(255, 255, 255, 0.7);
+  --rule-brand: rgba(255, 255, 255, 0.16);
+  --rule-brand-strong: rgba(255, 255, 255, 0.28);
+  --fill-brand-subtle: rgba(255, 255, 255, 0.04);
+
+  /* Footer sits on the pale brand tint (#DAD7FF, luminance 0.707).
+     These are the lowest text opacities that still clear AA against
+     it. The previous `opacity-60` on the legal disclosures measured
+     2.95:1. */
+  --ink-soft: rgba(1, 0, 31, 0.74); /* 6.4:1 */
+  --ink-faint: rgba(1, 0, 31, 0.64); /* 5.6:1 */
 }
 
 @layer base {
@@ -109,6 +134,42 @@
     background-color: #dad7ff;
     color: #01001f;
   }
+
+  /* Visible keyboard focus on every interactive element.
+     The marketing markup uses custom `cs-*` classes rather than the
+     shadcn `ui/` primitives, so nothing supplied a focus ring before. */
+  :focus-visible {
+    outline: 2px solid #dad7ff;
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  /* Never suppress the focus ring on the custom pill buttons. */
+  .cs-btn:focus-visible,
+  .cs-nav-link:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 3px;
+  }
+}
+
+/* Skip link — first tab stop, reveals itself on focus. */
+.cs-skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100%;
+  z-index: 200;
+  border-radius: 9999px;
+  background: #ffffff;
+  color: #01001f;
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  transition: top 180ms ease;
+}
+
+.cs-skip-link:focus-visible {
+  top: 1rem;
 }
 
 /* Typography utilities from the spec */
@@ -152,6 +213,30 @@
   letter-spacing: -0.012em;
 }
 
+/* Card-scale heading. The scale stopped at cs-h4, but the six-up grids
+   on /legal/security and the news cards both asked for a step below it
+   and reached for `cs-h5` — which was never defined. In Tailwind v4 an
+   undefined utility simply emits a class with no rules, so those
+   headings inherited the page's display font at whatever size the
+   cascade happened to leave them, and the paragraphs beside them fell
+   back to 16px sans. Defining the step fixes both pages; bumping them
+   to cs-h4 would have over-sized a dense grid. */
+@utility cs-h5 {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.7vw, 26px);
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+@utility cs-body-sm {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
+}
+
 @utility cs-body-lg {
   font-family: var(--font-display);
   font-size: clamp(20px, 1.8vw, 30px);
@@ -181,6 +266,22 @@
   font-weight: 500;
   line-height: 1.35;
   letter-spacing: 0.02em;
+}
+
+/* Small uppercase label above a section headline.
+   Budget rule for this codebase: at most one eyebrow per three
+   sections, site-wide. A section eyebrow and the headline beneath it
+   usually restate the same thing, and running one above every header
+   is what gives a page its templated rhythm. If you add one here,
+   check the surrounding sections first. */
+@utility cs-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--on-brand-muted);
 }
 
 /* Pill controls */
@@ -230,17 +331,6 @@
   }
 }
 
-@utility cs-btn-link {
-  background-color: transparent;
-  color: #ffffff;
-  padding: 0;
-  height: auto;
-  border-radius: 0;
-  &:hover {
-    opacity: 0.75;
-  }
-}
-
 @utility cs-input {
   display: flex;
   align-items: center;
@@ -262,15 +352,24 @@
   }
 }
 
-@utility cs-nav-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px;
-  border-radius: 9999px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(8px);
+/* Select control. `cs-input` gives a pill with fixed height, which is the
+   right shape for a single-line text field but wrong for a control with a
+   dropdown affordance — the native arrow sits off a 40px pill. This keeps
+   the field colours and focus treatment and swaps in a chevron. */
+@utility cs-select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2301001f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px 16px;
+  cursor: pointer;
+  /* The OS-rendered dropdown list is transparent on some platforms, which
+     leaves white-on-white option text. Force an opaque, inked list. */
+  option {
+    background-color: #ffffff;
+    color: #01001f;
+  }
 }
 
 @utility cs-nav-link {
@@ -285,78 +384,181 @@
   }
 }
 
-@utility cs-nav-link-active {
-  background-color: #ffffff;
-  color: #01001f;
-  &:hover {
-    background-color: #ffffff;
-  }
-}
-
-@utility cs-card {
-  background-color: #2e21de;
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  padding: 26px;
-}
-
 @utility cs-surface {
   background-color: #ffffff;
   color: #01001f;
   border-radius: 16px;
 }
 
-@utility cs-divider {
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
+/* ── Hero ─────────────────────────────────────────────────────────────
+   The hero headline is a touch larger than `cs-h1` but capped lower,
+   because the longest line here ("Sophisticated Investors.") has a
+   descender-free but very wide italic run — a 96px cap pushes the
+   block past the fold on a 900px-tall laptop. */
+.cs-hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 6.4vw, 84px);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  /* Clear the italic ascenders without opening the leading. */
+  padding-bottom: 0.06em;
 }
 
-/* Animations & Visual Effects */
-@keyframes cs-pulse-glow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.75; transform: scale(1.08); }
+/* Italic emphasis stays in the same family as the surrounding
+   headline, and gets the extra leading that a serif italic needs so
+   the descenders aren't clipped at line-height 1.06. */
+.cs-italic {
+  font-style: italic;
+  font-weight: 400;
+  opacity: 0.92;
 }
 
-@keyframes cs-float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-8px); }
+.cs-trademark {
+  font-size: 0.2em;
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 0.12em;
+  color: var(--on-brand-muted);
 }
 
-@keyframes cs-marquee {
-  0% { transform: translateX(0%); }
-  100% { transform: translateX(-50%); }
+.cs-hero-fade {
+  opacity: 0;
+  animation: heroFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes cs-roll-vertical {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-50%); }
+.cs-hero-fade-1 {
+  animation-delay: 0.5s;
 }
 
-.animate-pulse-glow {
-  animation: cs-pulse-glow 8s ease-in-out infinite;
+.cs-hero-fade-2 {
+  animation-delay: 0.65s;
 }
 
-.animate-float {
-  animation: cs-float 6s ease-in-out infinite;
+/* ── Marquee ticker ───────────────────────────────────────────────────
+   Each half is a self-contained group, so translateX(-50%) lands
+   exactly on the seam. Spacing lives inside .cs-marquee-item rather
+   than as a flex `gap` on the track — a track-level gap makes the two
+   halves unequal and reintroduces a half-gap jump each loop. */
+.cs-marquee {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 6%,
+    #000 94%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 6%,
+    #000 94%,
+    transparent 100%
+  );
 }
 
-.animate-marquee {
+.cs-marquee-track {
   display: flex;
   width: max-content;
-  animation: cs-marquee 30s linear infinite;
+  animation-name: cs-marquee-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
-.animate-marquee:hover {
+.cs-marquee:hover .cs-marquee-track {
   animation-play-state: paused;
 }
 
-.animate-roll-vertical {
-  animation: cs-roll-vertical 24s linear infinite;
+.cs-marquee-group {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.animate-roll-vertical:hover {
-  animation-play-state: paused;
+.cs-marquee-item {
+  padding-inline: 24px;
 }
+
+@keyframes cs-marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── Scroll reveal ────────────────────────────────────────────────────
+   The hidden state lives here rather than in an inline style so the
+   <noscript> fallback below can un-hide it. `.is-in` is added by
+   useInView; the end state is the element's natural state. */
+.cs-reveal {
+  opacity: 0;
+  transform: translateY(var(--cs-reveal-y, 32px));
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--cs-reveal-delay, 0s),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--cs-reveal-delay, 0s);
+}
+
+.cs-reveal.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cs-reveal-clip {
+  clip-path: inset(8% 0 8% 0);
+  transition:
+    clip-path 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--cs-reveal-delay, 0s),
+    opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--cs-reveal-delay, 0s);
+}
+
+.cs-reveal-clip.is-in {
+  clip-path: inset(0 0 0 0);
+}
+
+/* Stagger: the per-item offset comes from nth-child, so it is correct
+   on the first paint. Previously computed from a ref callback after
+   the style prop was read, which meant every item used index 0. */
+.cs-stagger-item {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0s,
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0s;
+}
+
+.cs-stagger.is-in > .cs-stagger-item {
+  transition-delay: calc(var(--cs-stagger-step, 0.09s) * var(--cs-i, 0));
+}
+
+.cs-stagger.is-in > .cs-stagger-item.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cs-stagger > .cs-stagger-item:nth-child(1)  { --cs-i: 0; }
+.cs-stagger > .cs-stagger-item:nth-child(2)  { --cs-i: 1; }
+.cs-stagger > .cs-stagger-item:nth-child(3)  { --cs-i: 2; }
+.cs-stagger > .cs-stagger-item:nth-child(4)  { --cs-i: 3; }
+.cs-stagger > .cs-stagger-item:nth-child(5)  { --cs-i: 4; }
+.cs-stagger > .cs-stagger-item:nth-child(6)  { --cs-i: 5; }
+.cs-stagger > .cs-stagger-item:nth-child(7)  { --cs-i: 6; }
+.cs-stagger > .cs-stagger-item:nth-child(8)  { --cs-i: 7; }
+.cs-stagger > .cs-stagger-item:nth-child(9)  { --cs-i: 8; }
+.cs-stagger > .cs-stagger-item:nth-child(10) { --cs-i: 9; }
+.cs-stagger > .cs-stagger-item:nth-child(11) { --cs-i: 10; }
+.cs-stagger > .cs-stagger-item:nth-child(12) { --cs-i: 11; }
+
+/* ── Animations & Visual Effects ───────────────────────────────────────
+   Note: the former cs-pulse-glow / cs-float / cs-marquee / cs-roll-vertical
+   keyframes and their .animate-* classes had no consumers and were
+   removed. Marquee motion now lives in MarqueeTicker.tsx, and every
+   loop declared here is neutralised under reduced motion at the foot
+   of this file. */
 
 @keyframes studio-rotate-cw {
   from { transform: rotate(0deg); }
@@ -377,11 +579,6 @@
 }
 
 /* Homepage animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes fadeScaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
@@ -405,39 +602,6 @@
 @keyframes fadeSlideUp {
   from { opacity: 0; transform: translateY(40px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* Glassmorphic elements */
-.cs-glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.cs-glass-dark {
-  background: rgba(1, 0, 31, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.cs-card-hover {
-  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.cs-card-hover:hover {
-  transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
-}
-
-/* Grid background pattern */
-.bg-grid-pattern {
-  background-size: 40px 40px;
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
 }
 
 /* ── Premium Interactive Effects ───────────────────────────────── */
@@ -555,58 +719,6 @@
   transform: scale(0.97);
 }
 
-/* Pulse ring for featured CTAs */
-@keyframes cs-pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(107, 74, 255, 0.4); }
-  70% { box-shadow: 0 0 0 12px rgba(107, 74, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(107, 74, 255, 0); }
-}
-
-.cs-pulse-ring {
-  animation: cs-pulse-ring 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-/* Shimmer loading placeholder */
-@keyframes cs-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.cs-shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.03) 25%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 75%
-  );
-  background-size: 200% 100%;
-  animation: cs-shimmer 2s ease-in-out infinite;
-}
-
-/* Smooth scroll-triggered fade with parallax feel */
-.cs-parallax-slow {
-  will-change: transform;
-  transition: transform 0.1s linear;
-}
-
-/* Section reveal with subtle upward drift */
-@keyframes cs-reveal-up {
-  from {
-    opacity: 0;
-    clip-path: inset(10% 0 0 0);
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-    transform: translateY(0);
-  }
-}
-
-.cs-reveal-up {
-  animation: cs-reveal-up 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 /* Mobile menu slide-in */
 @keyframes slideInDown {
   from { opacity: 0; transform: translateY(-12px) scale(0.97); }
@@ -669,4 +781,71 @@
 .cs-scroll-chevron span {
   opacity: 0;
   animation: heroFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.8s forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Reduced motion
+
+   Before this block, none of the site's ~15 looping or
+   scroll-driven animations consulted prefers-reduced-motion. Only
+   the Lenis smooth-scroll wrapper did, which meant a user with the
+   OS setting on still got ambient orb drift, the stat marquee, the
+   bouncing scroll chevron, the rotating studio rings, the pulsing
+   mobile CTA, shimmer sweeps, and the 76-frame scroll-jacked hero.
+
+   The blanket reset collapses durations so every `forwards`-filled
+   entrance animation lands on its end state instantly (reveals
+   resolve to visible rather than stranding content at opacity 0),
+   and the explicit overrides below kill the loops and the
+   scroll-driven canvas outright, since those are driven in JS.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Looping decoration: stop dead rather than run at 0.01ms. */
+  .cs-ambient-orb,
+  .cs-scroll-chevron svg,
+  .cs-shimmer,
+  .animate-studio-rotate-cw,
+  .animate-studio-rotate-ccw,
+  [data-cs-marquee] {
+    animation: none !important;
+  }
+
+  /* Entrance keyframes hold `opacity: 0` at 0% — pin them to the end
+     state so nothing is left invisible. */
+  .cs-word-reveal,
+  .cs-scroll-chevron,
+  .cs-scroll-chevron span,
+  .cs-mobile-menu-enter {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+
+  /* Reveals resolve immediately rather than transitioning. The blanket
+     duration reset above already collapses them; this makes the final
+     state explicit so nothing can be caught mid-hide. */
+  .cs-reveal,
+  .cs-stagger-item {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+
+  /* Hover lift is decoration, not feedback — keep the colour shift,
+     drop the translation. */
+  .cs-glow-card:hover,
+  .cs-hover-lift:hover,
+  .cs-zone-arrow:hover {
+    transform: none !important;
+  }
 }

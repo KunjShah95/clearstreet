@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FadeInSection } from "../components/fade-in-section";
+import { PageHero } from "../components/page-hero";
 import { ArrowRight, Newspaper, Megaphone, BookOpen, Calendar, ExternalLink } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { img, type ImageKey } from "../lib/images";
 
 export const Route = createFileRoute("/news")({
   head: () => ({
@@ -17,29 +19,41 @@ export const Route = createFileRoute("/news")({
   component: NewsPage,
 });
 
+/** The canonical home for article content.
+ *
+ *  This build has an index at /news and no article routes under it. The
+ *  card data below used to store site-relative paths like
+ *  `/news/press-releases/clear-street-appoints-...`, which the card
+ *  rendered through `<Link>`. Because no such route exists, every one
+ *  of the 40 internal cards resolved to the 404 page — the entire
+ *  listing was dead. Storing full URLs and rendering plain anchors
+ *  points each card at the article that actually exists. */
+const NEWS_ORIGIN = "https://www.clearstreet.io";
+
 type NewsItem = {
   type: "pressReleases" | "blog" | "conferences";
   title: string;
   href: string;
-  image?: string;
+  /** Manifest key for the thumbnail, or omitted where an article has none. */
+  image?: ImageKey;
   date?: string;
 };
 
 const newsItems: NewsItem[] = [
-  { type: "pressReleases", title: "Clear Street Unifies Client Experience with Global Platform Sales Launch", href: "/news/press-releases/clear-street-unifies-client-experience-with-global-platform-sales-launch-one-clear-stre", image: "https://cdn.sanity.io/images/40fnhjbe/production/8a7aded60c0e3422cd5524308626298e97104dce-1920x1080.png", date: "2025" },
-  { type: "pressReleases", title: "Clear Street Appoints Sean Hendelman to Lead Active Division", href: "/news/press-releases/clear-street-appoints-sean-hendelman-to-lead-active-division", image: "https://cdn.sanity.io/images/40fnhjbe/production/15aaab81663b1c17e087e8f423a2b12114999e45-3840x2160.png", date: "2025" },
-  { type: "blog", title: "The 'Golden Record' That Makes Voluntary Corporate Actions Easier", href: "/news/blog/the-golden-record-that-makes-voluntary-corporate-actions-easier", image: "https://cdn.sanity.io/images/40fnhjbe/production/c2e9aaae985596b777fd60fb099e7fe9a966cb0b-1920x1080.jpg", date: "2025" },
-  { type: "blog", title: "Clear Street's Commitment to Corporate Access and the 'Power of Prime'", href: "/news/blog/clear-streets-commitment-to-corporate-access-and-the-power-of-prime", image: "https://cdn.sanity.io/images/40fnhjbe/production/cd9ced9228f740345e94536d46c8a358d388a1fd-3840x2160.png", date: "2025" },
+  { type: "pressReleases", title: "Clear Street Unifies Client Experience with Global Platform Sales Launch", href: "/news/press-releases/clear-street-unifies-client-experience-with-global-platform-sales-launch-one-clear-stre", image: "news.platform-sales", date: "2025" },
+  { type: "pressReleases", title: "Clear Street Appoints Sean Hendelman to Lead Active Division", href: "/news/press-releases/clear-street-appoints-sean-hendelman-to-lead-active-division", image: "news.hendelman", date: "2025" },
+  { type: "blog", title: "The 'Golden Record' That Makes Voluntary Corporate Actions Easier", href: "/news/blog/the-golden-record-that-makes-voluntary-corporate-actions-easier", image: "news.golden-record", date: "2025" },
+  { type: "blog", title: "Clear Street's Commitment to Corporate Access and the 'Power of Prime'", href: "/news/blog/clear-streets-commitment-to-corporate-access-and-the-power-of-prime", image: "news.corporate-access", date: "2025" },
   { type: "pressReleases", title: "Clear Street Promotes Technology & Client Service with Executive Organizational Changes", href: "/news/press-releases/clear-street-promotes-technology-client-service-with-executive-organizational-changes", date: "2025" },
-  { type: "pressReleases", title: "Clear Street Expands European Market Access with MiFID II License in the Netherlands", href: "/news/press-releases/clear-street-expands-european-market-access-with-mifid-ii-license-in-the-netherlands", image: "https://cdn.sanity.io/images/40fnhjbe/production/bb50edfeb4740d2b98c08dc499b1eb374b14873b-1920x1080.png", date: "2025" },
-  { type: "blog", title: "History of Data at Clear Street", href: "/news/blog/history-of-data-at-clear-street", image: "https://cdn.sanity.io/images/40fnhjbe/production/97681fb649a2b188213efadf85b2c2c026adc80b-3840x2160.png", date: "2025" },
-  { type: "pressReleases", title: "Clear Street Welcomes Industry Veteran Edward Tilly as President", href: "/news/press-releases/clear-street-welcomes-industry-veteran-edward-tilly-as-president", image: "https://cdn.sanity.io/images/40fnhjbe/production/bdd7df8352a5298bbbb543c2fe802fd1324e01fc-3840x2160.png", date: "2025" },
-  { type: "blog", title: "Clear Street Investment Banking Expands Blockchain and Digital Assets Franchise", href: "/news/blog/clear-street-expands-blockchain-digital-assets-franchise", image: "https://cdn.sanity.io/images/40fnhjbe/production/71aec502bcf84e7d8195a8e12ee937e13c02153d-3840x2160.png", date: "2025" },
-  { type: "pressReleases", title: "Clear Street's Outsourced Trading Team Further Expands", href: "/news/press-releases/clear-streets-outsourced-trading-team-further-expands", image: "https://cdn.sanity.io/images/40fnhjbe/production/9fe1872d2f07b225e33b84b0c2406bec27d72353-1920x1080.png", date: "2025" },
-  { type: "pressReleases", title: "Clear Street Welcomes Mike Buchenberger as Chief Human Resources Officer", href: "/news/press-releases/clear-street-welcomes-mike-buchenberger-as-chief-human-resources-officer", image: "https://cdn.sanity.io/images/40fnhjbe/production/4b366431e6a0ae1c6396fe0bf05ca66b965291cc-1920x1080.png", date: "2025" },
+  { type: "pressReleases", title: "Clear Street Expands European Market Access with MiFID II License in the Netherlands", href: "/news/press-releases/clear-street-expands-european-market-access-with-mifid-ii-license-in-the-netherlands", image: "news.mifid-ii", date: "2025" },
+  { type: "blog", title: "History of Data at Clear Street", href: "/news/blog/history-of-data-at-clear-street", image: "news.history-of-data", date: "2025" },
+  { type: "pressReleases", title: "Clear Street Welcomes Industry Veteran Edward Tilly as President", href: "/news/press-releases/clear-street-welcomes-industry-veteran-edward-tilly-as-president", image: "news.tilly", date: "2025" },
+  { type: "blog", title: "Clear Street Investment Banking Expands Blockchain and Digital Assets Franchise", href: "/news/blog/clear-street-expands-blockchain-digital-assets-franchise", image: "news.blockchain-franchise", date: "2025" },
+  { type: "pressReleases", title: "Clear Street's Outsourced Trading Team Further Expands", href: "/news/press-releases/clear-streets-outsourced-trading-team-further-expands", image: "news.outsourced-trading", date: "2025" },
+  { type: "pressReleases", title: "Clear Street Welcomes Mike Buchenberger as Chief Human Resources Officer", href: "/news/press-releases/clear-street-welcomes-mike-buchenberger-as-chief-human-resources-officer", image: "news.buchenberger", date: "2025" },
   { type: "pressReleases", title: "Clear Street Expands UK Leadership Team with Key Senior Hires", href: "/news/press-releases/clear-street-expands-uk-leadership-team-with-key-senior-hires", date: "2025" },
   { type: "pressReleases", title: "Clear Street Investment Banking Expands Blockchain & Digital Asset", href: "/news/press-releases/clear-street-ib-expands-blockchain-digital-asset", date: "2025" },
-  { type: "pressReleases", title: "Clear Street to Acquire Fox River Algorithmic Trading Business from Instinet", href: "/news/press-releases/clear-street-to-acquire-fox-river-algorithmic-trading-business-from-instinet", image: "https://cdn.sanity.io/images/40fnhjbe/production/bdd7df8352a5298bbbb543c2fe802fd1324e01fc-3840x2160.png", date: "2025" },
+  { type: "pressReleases", title: "Clear Street to Acquire Fox River Algorithmic Trading Business from Instinet", href: "/news/press-releases/clear-street-to-acquire-fox-river-algorithmic-trading-business-from-instinet", image: "news.tilly", date: "2025" },
   { type: "pressReleases", title: "Clear Street Launches Equity Research Group", href: "/news/press-releases/clear-street-launches-equity-research-group", date: "2025" },
   { type: "pressReleases", title: "Clear Street Launches Healthcare & Biotechnology Equity Research", href: "/news/press-releases/clear-street-launches-healthcare-biotechnology-equity-research", date: "2025" },
   { type: "pressReleases", title: "Clear Street Closes $400 Million Senior Notes Offering", href: "/news/press-releases/clear-street-closes-400-million-senior-notes-offering", date: "2025" },
@@ -74,102 +88,153 @@ const tabs = [
   { id: "pressReleases", label: "Press Releases", icon: Megaphone },
   { id: "blog", label: "Blog", icon: BookOpen },
   { id: "conferences", label: "Events", icon: Calendar },
-];
+] as const;
 
-const typeLabels: Record<string, string> = {
+const typeLabels: Record<NewsItem["type"], string> = {
   pressReleases: "Press Release",
   blog: "Blog Post",
   conferences: "Event",
 };
 
-function NewsPage() {
-  const [activeTab, setActiveTab] = useState("all");
+/** Resolve a stored path to an absolute URL on the news origin. */
+function articleUrl(href: string) {
+  return href.startsWith("http") ? href : `${NEWS_ORIGIN}${href}`;
+}
 
-  const filtered = activeTab === "all" ? newsItems : newsItems.filter((i) => i.type === activeTab);
+function NewsPage() {
+  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]["id"]>("all");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const filtered =
+    activeTab === "all" ? newsItems : newsItems.filter((i) => i.type === activeTab);
+
+  // Roving focus. These were bare buttons: four separate tab stops, no
+  // selected state announced, and arrow keys did nothing.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const last = tabs.length - 1;
+    const current = tabs.findIndex((t) => t.id === activeTab);
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = current === last ? 0 : current + 1;
+    else if (e.key === "ArrowLeft") next = current === 0 ? last : current - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveTab(tabs[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   return (
-    <div className="px-4 sm:px-8">
-      <Hero />
-      <FadeInSection>
-        <div className="mx-auto max-w-7xl pb-4">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 font-sans text-sm font-medium transition-all ${
-                    activeTab === tab.id
-                      ? "border-indigo-500 bg-indigo-500/20 text-white"
-                      : "border-white/20 text-white/60 hover:border-white/40 hover:text-white/80"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+    <>
+      <PageHero
+        eyebrow="News & Insights"
+        title="The latest from Clear Street"
+        lede="Press releases, blog posts, and industry events — stay informed about our platform, our people, and our perspective on the markets."
+        tone="orb"
+      />
+
+      <FadeInSection className="mx-auto mt-16 max-w-7xl px-4 sm:px-8">
+        <div
+          role="tablist"
+          aria-label="Filter news by type"
+          onKeyDown={onKeyDown}
+          className="flex flex-wrap gap-2"
+        >
+          {tabs.map((tab, i) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                ref={(el) => {
+                  tabRefs.current[i] = el;
+                }}
+                role="tab"
+                id={`news-tab-${tab.id}`}
+                aria-selected={tab.id === activeTab}
+                aria-controls={`news-panel-${tab.id}`}
+                tabIndex={tab.id === activeTab ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 font-sans text-sm font-medium transition-all ${
+                  tab.id === activeTab
+                    ? "border-indigo-500 bg-indigo-500/20 text-white"
+                    : "border-white/20 text-[color:var(--on-brand-muted)] hover:border-white/35 hover:text-[color:var(--on-brand)]"
+                }`}
+              >
+                <Icon aria-hidden className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </FadeInSection>
-      <FadeInSection>
-        <div className="mx-auto max-w-7xl pb-20">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+
+      <FadeInSection className="mx-auto mt-10 max-w-7xl px-4 sm:px-8">
+        <div
+          role="tabpanel"
+          id={`news-panel-${activeTab}`}
+          aria-labelledby={`news-tab-${activeTab}`}
+          tabIndex={0}
+        >
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((item, i) => (
-              <NewsCard key={`${item.type}-${i}`} item={item} index={i} />
+              <NewsCard key={`${item.type}-${i}`} item={item} />
             ))}
           </div>
           {filtered.length === 0 && (
-            <p className="cs-body mt-12 text-center text-white/40">No items found.</p>
+            <p className="cs-body mt-12 text-center text-[color:var(--on-brand-muted)]">
+              No items found.
+            </p>
           )}
         </div>
       </FadeInSection>
-      <CTASection />
-    </div>
-  );
-}
 
-function Hero() {
-  return (
-    <section className="relative overflow-hidden pb-16 pt-28 sm:pt-36">
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-indigo-500/10 blur-[120px]" />
-      </div>
-      <FadeInSection>
-        <div className="mx-auto max-w-7xl">
-          <div
-            className="max-w-3xl animate-in fade-in slide-in-from-bottom-4"
-            style={{ animationDuration: "0.8s", animationFillMode: "both" }}
-          >
-            <p className="cs-label-sm mb-4 uppercase tracking-wider text-indigo-300">News & Insights</p>
-            <h1 className="cs-display text-white">
-              The latest from{" "}
-              <span className="text-indigo-400">Clear Street</span>
-            </h1>
-            <p className="cs-body-lg mt-6 max-w-2xl text-white/60">
-              Press releases, blog posts, and industry events — stay informed about our platform,
-              our people, and our perspective on the markets.
+      <FadeInSection className="mx-auto mb-24 mt-32 max-w-7xl px-4 sm:px-8">
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-600/20 to-primary px-8 py-16 text-center sm:px-16">
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-indigo-500/20 blur-[100px]" />
+            <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-indigo-400/10 blur-[80px]" />
+          </div>
+          <div className="relative">
+            <h2 className="cs-h2 text-white">Want to stay in the loop?</h2>
+            <p className="cs-body-lg mx-auto mt-4 max-w-lg text-[color:var(--on-brand)]">
+              Get our latest press releases and blog posts delivered to your inbox.
             </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <a
+                href="https://www.linkedin.com/company/clear-street"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="cs-btn cs-btn-light"
+              >
+                Follow on LinkedIn
+              </a>
+              <Link to="/studio" className="cs-btn cs-btn-secondary">
+                Clear Street Studio
+              </Link>
+            </div>
           </div>
         </div>
       </FadeInSection>
-    </section>
+    </>
   );
 }
 
-function NewsCard({ item, index }: { item: NewsItem; index: number }) {
+function NewsCard({ item }: { item: NewsItem }) {
   const isExternal = item.href.startsWith("http");
 
-  const content = (
-    <article
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06]"
+  return (
+    <a
+      href={articleUrl(item.href)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[color:var(--fill-brand-subtle)] transition-colors duration-200 hover:border-[color:var(--rule-brand-strong)] hover:bg-white/[0.06]"
     >
       {item.image ? (
         <div className="aspect-video overflow-hidden">
           <img
-            src={item.image}
-            alt={item.title}
+            src={img(item.image, { w: 640 })}
+            alt=""
+            aria-hidden
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
             decoding="async"
@@ -178,73 +243,31 @@ function NewsCard({ item, index }: { item: NewsItem; index: number }) {
           />
         </div>
       ) : (
-        <div className="flex aspect-video items-center justify-center bg-white/5">
+        <div aria-hidden className="flex aspect-video items-center justify-center bg-white/5">
           <Newspaper className="h-10 w-10 text-white/20" />
         </div>
       )}
       <div className="flex flex-1 flex-col p-5">
         <div className="mb-3 flex items-center gap-2">
-          <span className="rounded-full bg-indigo-500/10 px-2.5 py-0.5 font-sans text-[11px] font-medium uppercase tracking-wider text-indigo-300">
+          <span className="rounded-full bg-indigo-500/10 px-2.5 py-0.5 font-sans text-[11px] font-medium uppercase tracking-wider text-indigo-200">
             {typeLabels[item.type]}
           </span>
           {item.date && (
-            <span className="font-sans text-[11px] text-white/40">{item.date}</span>
+            <span className="font-sans text-[11px] text-[color:var(--on-brand-muted)]">
+              {item.date}
+            </span>
           )}
         </div>
-        <h3 className="cs-h5 flex-1 text-white group-hover:text-indigo-200 transition-colors">
+        <h3 className="cs-h5 flex-1 text-white transition-colors group-hover:text-indigo-200">
           {item.title}
         </h3>
-        <div className="mt-4 flex items-center gap-1 font-sans text-xs font-medium text-indigo-400 group-hover:gap-2 transition-all">
+        <span className="mt-4 inline-flex items-center gap-1 font-sans text-xs font-medium text-indigo-300 transition-all group-hover:gap-2">
           {isExternal ? "Learn more" : "Read more"}
-          {isExternal ? (
-            <ExternalLink className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowRight className="h-3.5 w-3.5" />
-          )}
-        </div>
+          {/* The external-link glyph is the honest signal here: every
+              article lives on the news origin, not in this router. */}
+          <ExternalLink aria-hidden className="h-3.5 w-3.5" />
+        </span>
       </div>
-    </article>
-  );
-
-  if (isExternal) {
-    return (
-      <a href={item.href} target="_blank" rel="noopener noreferrer" className="block">
-        {content}
-      </a>
-    );
-  }
-
-  return <Link to={item.href} className="block">{content}</Link>;
-}
-
-function CTASection() {
-  return (
-    <FadeInSection>
-      <section className="mx-auto max-w-7xl pb-24">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600/20 to-primary px-8 py-16 text-center sm:px-16">
-          <div className="pointer-events-none absolute inset-0 -z-10">
-            <div className="absolute right-0 top-0 h-64 w-64 rounded-full bg-indigo-500/20 blur-[100px]" />
-            <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-indigo-400/10 blur-[80px]" />
-          </div>
-          <h2 className="cs-h2 text-white">Want to stay in the loop?</h2>
-          <p className="cs-body mt-4 max-w-lg mx-auto text-white/60">
-            Get our latest press releases and blog posts delivered to your inbox.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a
-              href="https://www.linkedin.com/company/clear-street"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="cs-btn cs-btn-light"
-            >
-              Follow on LinkedIn
-            </a>
-            <Link to="/contact" className="cs-btn cs-btn-secondary">
-              Get in touch
-            </Link>
-          </div>
-        </div>
-      </section>
-    </FadeInSection>
+    </a>
   );
 }

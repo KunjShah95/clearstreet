@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useEffect, useState } from "react";
+import { Fragment, useRef, useEffect, useState } from "react";
 import { FadeInSection, Stagger, StaggerItem } from "../components/fade-in-section";
-import { MarqueeTicker } from "../components/marquee-ticker";
-import { RiveIcon } from "../components/rive-icon";
-import { CountUp } from "../components/count-up";
+import { StatsMarquee as SharedStatsMarquee } from "../components/stats-marquee";
+import { img, type ImageKey } from "../lib/images";
 import { WorldMap } from "../components/world-map";
-import { useInView } from "../hooks/use-in-view";
+import { useInView, usePrefersReducedMotion } from "../hooks/use-in-view";
+import { getLenis } from "../components/smooth-scroll";
+import { LazyVideo } from "../components/lazy-video";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -56,14 +57,11 @@ function Home() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Scroll-driven image frame sequence                                 */
-/*  Uses direct DOM ref manipulation for opacity — zero React re-       */
-/*  renders during scroll, matching clearstreet.io's approach.          */
-/* ------------------------------------------------------------------ */
-/* ------------------------------------------------------------------ */
-/*  Canvas-driven hero frame sequence — single <canvas> renders all    */
-/*  76 preloaded frames with scroll-driven cuts. Runs the render loop  */
-/*  only when the frame actually changes (idles when stationary).      */
+/*  Canvas-driven hero frame sequence.                                 */
+/*                                                                     */
+/*  A single <canvas> paints the scroll-linked cut, so there is one     */
+/*  composited layer instead of 76 stacked <img> nodes. The render     */
+/*  loop only runs when the target frame actually changes.              */
 /* ------------------------------------------------------------------ */
 function ScrollVideo() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -71,247 +69,320 @@ function ScrollVideo() {
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const lastIdxRef = useRef(-1);
   const rafIdRef = useRef(0);
+  const scaleRef = useRef(1);
+  const copyRef = useRef<HTMLDivElement>(null);
+  const drawFrame = useRef<(idx: number) => void>(() => {});
+  const reduced = usePrefersReducedMotion();
 
-  /* Preload all 76 images — no crossOrigin (CDN doesn't send CORS headers) */
+  /* Frame loading.
+
+     All 76 frames have to be resident before the user reaches the end
+     of the pin — the sequence is scroll-driven playback, so a frame
+     that hasn't loaded simply isn't drawn and the hero falls back to
+     the flat background.
+
+     An earlier version drip-fed these through requestIdleCallback two
+     at a time, to spare the LCP element. That was the wrong lever:
+     idle callbacks are starved exactly while the user is scrolling, so
+     the sequence played back mostly empty.
+
+     What actually helps LCP here is priority, not a smaller request
+     count. Frame 1 is the only frame visible before any scrolling, so
+     it is issued first at high priority; the remaining 75 go out in a
+     short burst over the next few frames, which lets frame 1's
+     connection settle without queueing behind 75 equal-priority ones.
+     fetchPriority must be set before src — assigning src starts the
+     request immediately. */
   useEffect(() => {
     const imgs: HTMLImageElement[] = [];
-    for (let i = 0; i < TOTAL_FRAMES; i++) {
-      const img = new Image();
-      img.fetchPriority = i < 3 ? "high" : "auto";
-      img.src = frameUrl(i + 1);
-      imgs.push(img);
-    }
+    for (let i = 0; i < TOTAL_FRAMES; i++) imgs.push(new Image());
     imagesRef.current = imgs;
-  }, []);
 
-  /* Draw a single frame to the canvas, with optional prev-frame ghost */
-  const drawFrame = useRef<(idx: number) => void>();
+    let cancelled = false;
+
+    imgs[0].fetchPriority = "high";
+    imgs[0].src = frameUrl(1);
+
+    const BURST = 8;
+    let cursor = 1;
+    const pump = () => {
+      if (cancelled) return;
+      const end = Math.min(cursor + BURST, imgs.length);
+      for (; cursor < end; cursor++) imgs[cursor].src = frameUrl(cursor + 1);
+      if (cursor < imgs.length) requestAnimationFrame(pump);
+    };
+    requestAnimationFrame(pump);
+
+    return () => {
+      cancelled = true;
+      // Detach sources so an unmount doesn't leave 76 live decodes.
+      for (const img of imgs) img.src = "";
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: false })!;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
 
     const size = () => {
-      const parent = canvas.parentElement!;
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      // Render at device resolution (capped at 2x) so the frame stays
+      // sharp on retina without allocating a 3x backing store.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = parent.clientWidth;
       const h = parent.clientHeight;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+      const bw = Math.round(w * dpr);
+      const bh = Math.round(h * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
+        // Work in CSS pixels from here on. Note the draw below targets
+        // canvas.width / dpr, NOT canvas.width — the transform is
+        // already scaling by dpr, so passing backing-store dimensions
+        // would draw at dpr x dpr and crop to the top-left quadrant.
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
+      scaleRef.current = dpr;
     };
     size();
 
     drawFrame.current = (idx: number) => {
       size();
       const img = imagesRef.current[idx];
-      const prevImg = idx > 0 ? imagesRef.current[idx - 1] : null;
-      if (img && img.complete && img.naturalWidth > 0) {
-        /* Draw previous frame at 15% opacity for a subtle dissolve feel */
-        if (
-          prevImg &&
-          prevImg !== img &&
-          prevImg.complete &&
-          prevImg.naturalWidth > 0
-        ) {
-          ctx.globalAlpha = 0.15;
-          ctx.drawImage(prevImg, 0, 0, canvas.width, canvas.height);
-          ctx.globalAlpha = 1;
-        }
-        /* Draw current frame on top */
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      }
+      if (!img || !img.complete || img.naturalWidth === 0) return;
+      // Cover the viewport: scale so the image fills, centre the overflow.
+      const cw = canvas.width / scaleRef.current;
+      const ch = canvas.height / scaleRef.current;
+      const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      ctx.globalAlpha = 1;
+      ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
     };
 
-    /* Draw initial frame 0 */
-    /* Wait for first image to load, then draw */
-    const check = setInterval(() => {
-      const first = imagesRef.current[0];
-      if (first && first.complete && first.naturalWidth > 0) {
-        clearInterval(check);
-        lastIdxRef.current = 0;
-        drawFrame.current!(0);
-      }
-    }, 50);
-    /* Safety: clear after 10s */
-    setTimeout(() => clearInterval(check), 10000);
+    const first = imagesRef.current[0];
+    const onFirstFrame = () => {
+      lastIdxRef.current = 0;
+      drawFrame.current(0);
+      first.removeEventListener("load", onFirstFrame);
+    };
+    if (first.complete && first.naturalWidth > 0) onFirstFrame();
+    else first.addEventListener("load", onFirstFrame);
 
-    /* Resize listener — redraws current frame on window resize */
     const onResize = () => {
-      if (lastIdxRef.current >= 0) {
-        drawFrame.current?.(lastIdxRef.current);
-      }
+      if (lastIdxRef.current >= 0) drawFrame.current(lastIdxRef.current);
     };
-    window.addEventListener("resize", onResize);
+    window.addEventListener("resize", onResize, { passive: true });
 
     return () => {
-      clearInterval(check);
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       window.removeEventListener("resize", onResize);
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
   }, []);
 
-  /* Scroll handler — driven purely by scroll position; no RAF cycle otherwise */
+  /* Scroll linkage.
+     The previous handler called getBoundingClientRect() on every scroll
+     event, forcing a synchronous layout each time, and read the value
+     off the native scroll position even though Lenis is driving it.
+     The section's offset is now measured once (and on resize) so the
+     handler is pure arithmetic, and when Lenis is active we subscribe
+     to its scroll event instead of the native one. */
   useEffect(() => {
-    const onScroll = () => {
-      if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-      const rect = containerRef.current.getBoundingClientRect();
-      const totalHeight = window.innerHeight * TOTAL_FRAMES * FRAME_HEIGHT / 100;
-      const scrolled = Math.max(0, Math.abs(rect.top));
-      const progress = Math.min(scrolled / totalHeight, 1);
+    if (reduced) {
+      drawFrame.current(0);
+      lastIdxRef.current = 0;
+      if (copyRef.current) copyRef.current.style.opacity = "1";
+      return;
+    }
 
-      /* easeOutCubic — smooth, gradual deceleration */
+    let top = 0;
+    let span = 0;
+    const measure = () => {
+      top = container.getBoundingClientRect().top + window.scrollY;
+      span = window.innerHeight * ((TOTAL_FRAMES * FRAME_HEIGHT) / 100);
+    };
+    measure();
+    window.addEventListener("resize", measure, { passive: true });
+
+    const update = () => {
+      const progress = Math.min(Math.max((window.scrollY - top) / span, 0), 1);
       const eased = 1 - Math.pow(1 - progress, 3);
       const idx = Math.min(Math.floor(eased * TOTAL_FRAMES), TOTAL_FRAMES - 1);
 
+      // Fade the copy out before the section starts releasing. The
+      // headline reaches the fixed header at ~43% of the runway, so
+      // the copy is fully clear by 0.40.
+      if (copyRef.current) {
+        const fade = 1 - Math.min(Math.max((progress - 0.2) / 0.2, 0), 1);
+        copyRef.current.style.opacity = String(fade);
+      }
+
       if (idx === lastIdxRef.current) return;
       lastIdxRef.current = idx;
-
-      /* Draw new frame on next animation frame (avoids layout thrash) */
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = 0;
-        drawFrame.current?.(idx);
+        drawFrame.current(idx);
       });
     };
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    // Prefer Lenis so the hero stays in step with the smoothed scroll
+    // instead of running against it.
+    const lenis = getLenis() as { on?: (e: string, cb: () => void) => void; off?: (e: string, cb: () => void) => void } | null;
+    if (lenis?.on) {
+      lenis.on("scroll", update);
+    } else {
+      window.addEventListener("scroll", update, { passive: true });
+    }
+    update();
+
+    return () => {
+      window.removeEventListener("resize", measure);
+      if (lenis?.off) lenis.off("scroll", update);
+      else window.removeEventListener("scroll", update);
+    };
+  }, [reduced]);
 
   return (
-    <>
-      <section ref={containerRef} className="relative">
+    // Scroll runway lives on the section, with the sticky hero as its
+    // first child. It used to be an empty sibling placed *before* the
+    // sticky element, which meant the hero sat at its static position
+    // — 1368px down the page — until the user scrolled far enough to
+    // trigger the pin. On load that rendered as a screen of empty
+    // background with the headline well below the fold.
+    <section
+      ref={containerRef}
+      className="relative"
+      style={{ height: `${TOTAL_FRAMES * FRAME_HEIGHT}vh` }}
+    >
+      <div className="sticky top-0 z-0 flex h-[100dvh] items-center overflow-hidden">
+        {/* Base wash. The frame sequence loads from an external CDN;
+            when it is slow or unreachable this keeps the hero reading
+            as a deliberate gradient instead of a flat void. */}
         <div
-          className="pointer-events-none"
-          style={{ height: `${TOTAL_FRAMES * FRAME_HEIGHT}vh` }}
+          aria-hidden
+          className="absolute inset-0 bg-[#01001f] bg-[radial-gradient(120%_85%_at_18%_8%,#2e21de_0%,#1b1580_45%,#01001f_100%)]"
         />
 
-        <div className="sticky inset-0 top-0 z-0 flex h-screen items-center overflow-hidden bg-[#01001f]">
-          {/* Ambient orbs — z-[1] above canvas */}
-          <div className="cs-ambient-orb z-[1] -left-32 top-0 h-[500px] w-[500px] bg-indigo-500/20" />
-          <div className="cs-ambient-orb z-[1] -right-20 bottom-0 h-[400px] w-[400px] bg-[#3b29e0]/20" />
-          <div className="cs-ambient-orb z-[1] left-1/3 top-1/2 h-[300px] w-[300px] bg-[#8b7aff]/15" />
+        {/* Ambient orbs sit above the canvas */}
+        <div aria-hidden className="cs-ambient-orb z-[1] -left-32 top-0 h-[500px] w-[500px] bg-indigo-500/20" />
+        <div aria-hidden className="cs-ambient-orb z-[1] -right-20 bottom-0 h-[400px] w-[400px] bg-[#3b29e0]/20" />
+        <div aria-hidden className="cs-ambient-orb z-[1] left-1/3 top-1/2 h-[300px] w-[300px] bg-[#8b7aff]/15" />
 
-          {/* Single canvas — no z-index needed, sits at default layer */}
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 h-full w-full"
-            style={{ backgroundColor: "#01001f" }}
-          />
+        <canvas
+          ref={canvasRef}
+          aria-hidden
+          className="absolute inset-0 h-full w-full"
+        />
 
-          <div className="absolute inset-0 z-[5] bg-gradient-to-t from-primary via-primary/20 to-transparent" />
+        {/* Scrims. The vertical wash ties the frame into the page; the
+            left-to-right one is what actually buys text contrast —
+            the copy is left-aligned over the busiest part of the
+            artwork, and a bottom-only gradient left it competing with
+            the chart detail behind it. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 z-[4] bg-gradient-to-r from-[#01001f]/92 via-[#01001f]/70 to-transparent"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 z-[5] bg-gradient-to-t from-primary via-primary/25 to-transparent"
+        />
 
-          {/* Hero text — overlaid on frames, word-by-word reveal */}
-          <div className="absolute inset-0 z-10 flex items-center">
-            <div className="mx-auto w-full max-w-7xl px-4 sm:px-8">
-              <div className="max-w-4xl">
-                <h1 className="cs-h1 text-white" style={{ opacity: 0, animation: "heroFadeUp 0.01s 0.15s forwards" }}>
-                  {["Speed,", "Transparency", "and", "Scale", "for", <em key="em" className="italic opacity-90">Sophisticated</em>, <em key="em2" className="italic opacity-90">Investors.</em>].map((word, i) => (
+        {/* Hero copy. Opacity is driven from the scroll handler (see
+            `update`) rather than declared here — the copy has to clear
+            the fixed header as the section releases, otherwise the
+            headline scrolls straight underneath the nav pill. */}
+        <div ref={copyRef} className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-8">
+            <div className="max-w-5xl">
+              <h1 className="cs-hero-title text-white">
+                {/* The space has to sit OUTSIDE the .cs-word-reveal span.
+                    That span is display: inline-block, and a trailing
+                    space inside an inline-block is trimmed at the box
+                    edge — so the words ran together as
+                    "Speed,TransparencyandScalefor". */}
+                {[
+                  "Speed,",
+                  "Transparency",
+                  "and",
+                  "Scale",
+                  "for",
+                  <em key="a" className="cs-italic">Sophisticated</em>,
+                  <em key="b" className="cs-italic">Investors.</em>,
+                ].map((word, i) => (
+                  <Fragment key={i}>
                     <span
-                      key={i}
                       className="cs-word-reveal"
-                      style={{
-                        animationDelay: `${0.2 + i * 0.07}s`,
-                      }}
+                      style={{ animationDelay: `${0.2 + i * 0.07}s` }}
                     >
-                      {word}{" "}
+                      {word}
                     </span>
-                  ))}
-                  <sup className="align-super text-[0.45em] opacity-70 cs-word-reveal" style={{ animationDelay: "0.76s" }}>&trade;</sup>
-                </h1>
-                <p className="cs-body-lg mt-8 max-w-3xl text-white/75" style={{
-                  opacity: 0,
-                  animation: "heroFadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.5s forwards",
-                }}>
-                  With $1.0 billion in capital raised from some of the most prominent investors, the
-                  Clear Street platform services 700+ institutional clients and supports ~$16 billion
-                  in customer balances.
-                </p>
-                <div className="mt-10 flex flex-wrap items-center gap-3" style={{
-                  opacity: 0,
-                  animation: "heroFadeUp 0.6s cubic-bezier(0.16,1,0.3,1) 0.65s forwards",
-                }}>
-                  <Link to="/contact" className="cs-btn cs-btn-light">
-                    Talk to our team
-                  </Link>
-                  <Link to="/services" className="cs-btn cs-btn-secondary">
-                    Explore the platform
-                  </Link>
-                </div>
+                    {" "}
+                  </Fragment>
+                ))}
+                <sup className="cs-trademark cs-word-reveal" style={{ animationDelay: "0.76s" }}>
+                  &trade;
+                </sup>
+              </h1>
+              <p className="cs-hero-fade cs-hero-fade-1 cs-body-lg mt-6 max-w-2xl text-[color:var(--on-brand)]">
+                Prime brokerage, clearing, and execution on infrastructure we built and operate.
+              </p>
+              <div className="cs-hero-fade cs-hero-fade-2 mt-8 flex flex-wrap items-center gap-3">
+                <Link to="/contact" className="cs-btn cs-btn-light">
+                  Talk to our team
+                </Link>
+                <Link to="/services" className="cs-btn cs-btn-secondary">
+                  Explore the platform
+                </Link>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Scroll indicator — animated bounce arrow */}
-          <div className="absolute bottom-12 left-1/2 z-20 -translate-x-1/2">
-            <div className="cs-scroll-chevron flex flex-col items-center gap-1">
-              <span className="font-sans text-[11px] uppercase tracking-[0.15em] text-white/30">
-                Scroll
-              </span>
-              <svg
-                className="h-5 w-5 text-white/30"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-                />
-              </svg>
-            </div>
+        <div className="absolute bottom-10 left-1/2 z-20 -translate-x-1/2">
+          <div className="cs-scroll-chevron flex flex-col items-center gap-1">
+            <span className="font-sans text-[11px] uppercase tracking-[0.15em] text-[color:var(--on-brand-muted)]">
+              Scroll
+            </span>
+            <svg
+              aria-hidden
+              className="h-5 w-5 text-[color:var(--on-brand-muted)]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
           </div>
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
-const stats = [
-  { value: "$1.0bn", label: "in capital raised", riv: "https://cdn.sanity.io/files/40fnhjbe/production/2039b6b689c1bed8b19e49dc9a861954bca76e48.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/d689231f2214b6a41f7f52a23c2dc36c1b8de92a-270x270.png" },
-  { value: "~550mm", label: "shares / day", riv: "https://cdn.sanity.io/files/40fnhjbe/production/e4b9f87300e4626ca6907acb45a3e5348c08d745.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/b1fc124413fd49362032895ee65bea977648e2c6-160x160.png" },
-  { value: "~$28.4bn", label: "notional / day", riv: "https://cdn.sanity.io/files/40fnhjbe/production/bb1a79c621a28db2d8f810667a662558df27a15d.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/616252af94d03f609c3c669e78fd8920a5c6dddf-160x160.png" },
-  { value: "~700", label: "institutional clients", riv: "https://cdn.sanity.io/files/40fnhjbe/production/bb1a79c621a28db2d8f810667a662558df27a15d.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/88d391f715baf4d6cea1430092201c9bd8cce0ef-160x160.png" },
-  { value: "800+", label: "employees worldwide", riv: "https://cdn.sanity.io/files/40fnhjbe/production/386bebb09582ccf09ea4c375762758702f33c029.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/62eeac92c57b7513602f235400107c1b5e975396-160x160.png" },
-  { value: "94% YoY", label: "transacted growth", riv: "https://cdn.sanity.io/files/40fnhjbe/production/6614fef61a9084867cbe5c6a78872c2c78cb671f.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/280041ac042811742253e7f5bc1c788d2fff9207-190x190.png" },
-  { value: "~$16bn", label: "customer balances", riv: "https://cdn.sanity.io/files/40fnhjbe/production/0dad6e380e80b1d7816e1c380c8f9c02fa857029.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/2e87bd97776b6981cc422452e701ce9b730e4eb8-190x192.png" },
-];
-
 function StatsMarquee() {
-  return (
-    <FadeInSection className="mx-auto mt-32 max-w-7xl overflow-hidden px-4 sm:px-8">
-      <p className="cs-label-sm mb-6 uppercase text-white/50">
-        Clear Street is replacing the legacy infrastructure used across capital markets
-      </p>
-      <MarqueeTicker speed={20}>
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="flex w-[200px] shrink-0 flex-col items-center text-center"
-          >
-            <div className="h-14 w-14">
-              <RiveIcon src={s.riv} fallback={s.icon} className="h-full w-full" />
-            </div>
-            <p className="cs-h3 mt-3 text-white">
-              <CountUp value={s.value} />
-            </p>
-            <p className="cs-label-sm mt-1 text-white/60">{s.label}</p>
-          </div>
-        ))}
-      </MarqueeTicker>
-    </FadeInSection>
-  );
+  return <SharedStatsMarquee className="mt-32" />;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Modernizing the brokerage ecosystem — narrative section             */
 /*  Inspired by the real clearstreet.io COBOL → modern platform story.  */
 /* ------------------------------------------------------------------ */
+const MODERNIZING_VIDEO =
+  "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4";
+const STUDIO_VIDEO =
+  "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-17-53.992Z-full.mp4";
+const EXECUTION_VIDEO =
+  "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-20-18.183Z-preview-mobile.mp4";
+
 function ModernizingSection() {
   return (
     <section className="mt-32 px-4 sm:px-8">
@@ -319,84 +390,59 @@ function ModernizingSection() {
         <FadeInSection>
           <div className="grid gap-16 md:grid-cols-2 md:items-center">
             <div>
-              <p className="cs-label-sm uppercase text-white/50">The problem</p>
-              <h2 className="cs-h2 mt-4 text-white">
-                The financial industry still operates on outdated infrastructure built in
-                the 1970s
+              <h2 className="cs-h2 text-white">
+                The industry still runs on infrastructure built in the 1970s
               </h2>
-              <p className="cs-body-lg mt-6 text-white/70">
-                Over the years, technology has been layered on top of these old
-                systems…
+              <p className="cs-body-lg mt-6 max-w-[60ch] text-[color:var(--on-brand)]">
+                Decades of patches sit on top of mainframe cores that were never designed
+                for today&rsquo;s volumes, latency targets, or data loads.
               </p>
-              <div className="mt-8 space-y-4">
-                <div className="flex items-start gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-5">
-                  <span
-                    aria-hidden
-                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-500/20 font-sans text-xs font-bold text-red-400"
-                  >
-                    !
-                  </span>
+              <ul className="mt-8 space-y-4">
+                <li className="flex items-start gap-4 border-t border-[color:var(--rule-brand)] pt-4">
+                  <StatusDot tone="risk" />
                   <div>
-                    <p className="font-sans text-sm font-medium text-white/90">
-                      Like 50-year-old COBOL mainframe systems
+                    <p className="font-sans text-sm font-medium text-white">
+                      COBOL mainframes now fifty years old
                     </p>
-                    <p className="mt-1 font-sans text-xs text-white/50">
-                      Legacy technology that can&rsquo;t keep up with modern market demands
+                    <p className="mt-1 font-sans text-xs text-[color:var(--on-brand-muted)]">
+                      Core systems that cannot keep pace with modern market volume
                     </p>
                   </div>
-                </div>
-                <div className="flex items-start gap-4 rounded-xl border border-yellow-500/20 bg-yellow-500/[0.03] p-5">
-                  <span
-                    aria-hidden
-                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-yellow-500/20 font-sans text-xs font-bold text-yellow-400"
-                  >
-                    !
-                  </span>
+                </li>
+                <li className="flex items-start gap-4 border-t border-[color:var(--rule-brand)] pt-4">
+                  <StatusDot tone="risk" />
                   <div>
-                    <p className="font-sans text-sm font-medium text-white/90">
-                      Leading to inefficiencies, reduced profit margins and increased risk
+                    <p className="font-sans text-sm font-medium text-white">
+                      Rising cost of maintenance, narrowing margins
                     </p>
-                    <p className="mt-1 font-sans text-xs text-white/50">
-                      The cost of maintaining legacy systems continues to rise
+                    <p className="mt-1 font-sans text-xs text-[color:var(--on-brand-muted)]">
+                      Spend goes to keeping legacy systems alive rather than to growth
                     </p>
                   </div>
-                </div>
-              </div>
+                </li>
+              </ul>
             </div>
 
             <div className="relative overflow-hidden rounded-2xl">
-              {/* Background video with overlay */}
-              <div aria-hidden className="pointer-events-none absolute inset-0">
-                <video
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="h-full w-full object-cover opacity-30"
-                  style={{ backgroundColor: "#01001f" }}
-                  preload="metadata"
-                >
-                  <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4" type="video/mp4" />
-                </video>
+              <LazyVideo
+                src={MODERNIZING_VIDEO}
+                className="pointer-events-none absolute inset-0 opacity-30"
+                style={{ backgroundColor: "#01001f" }}
+              >
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/80 via-primary/70 to-[#01001f]/90" />
-              </div>
+              </LazyVideo>
               <div className="relative border border-indigo-500/30 bg-gradient-to-br from-indigo-600/30 to-primary/20 p-8 md:p-12">
-                <div className="cs-ambient-orb -right-20 -top-20 h-60 w-60 bg-indigo-500/15" />
-                <p className="cs-label-sm uppercase text-indigo-300">The solution</p>
+                <div aria-hidden className="cs-ambient-orb -right-20 -top-20 h-60 w-60 bg-indigo-500/15" />
+                <p className="cs-eyebrow">The solution</p>
                 <h3 className="cs-h3 mt-4 text-white">
-                  A technology-driven platform designed for today&rsquo;s complex,
-                  global market
+                  A platform designed for today&rsquo;s global market
                 </h3>
-                <p className="cs-body mt-6 text-white/70">
-                  Clear Street is putting market participants on modern infrastructure,
-                  minimizing risk and facilitating growth for our clients with our
-                  real-time, cloud-native platform.
+                <p className="cs-body mt-6 text-[color:var(--on-brand)]">
+                  Clear Street puts market participants on modern infrastructure, reducing
+                  risk and supporting growth through a real-time, cloud-native platform.
                 </p>
-                <Link
-                  to="/about"
-                  className="cs-btn cs-btn-secondary mt-8 inline-flex"
-                >
-                  Our story →
+                <Link to="/about" className="cs-btn cs-btn-secondary mt-8 inline-flex">
+                  Read our story
                 </Link>
               </div>
             </div>
@@ -407,107 +453,94 @@ function ModernizingSection() {
   );
 }
 
+/**
+ * Status marker. The previous version drew a bare "!" glyph inside a
+ * red/amber circle for both the same severity of message, so the colour
+ * was carrying meaning it didn't have, and the glyph read as a stray
+ * character rather than an icon. `tone` is explicit, and the label is
+ * carried by the adjacent text rather than by colour alone.
+ */
+function StatusDot({ tone }: { tone: "risk" | "positive" }) {
+  const isRisk = tone === "risk";
+  return (
+    <span
+      aria-hidden
+      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+        isRisk ? "bg-amber-400" : "bg-emerald-400"
+      }`}
+    />
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Built for Multi-Asset Clearing / Designed for the Future           */
 /* ------------------------------------------------------------------ */
+const featureColumns = [
+  {
+    title: "Built for multi-asset clearing",
+    items: [
+      "One platform for every asset class",
+      "Real-time data and risk management",
+      "Position information in a single system",
+    ],
+    video: MODERNIZING_VIDEO,
+  },
+  {
+    title: "Designed for what comes next",
+    items: [
+      "Cloud-native, API-first, AI-enhanced",
+      "Horizontally scalable under load",
+      "Lower cost of ownership over time",
+    ],
+    video: EXECUTION_VIDEO,
+  },
+];
+
 function FeaturesSection() {
   return (
     <section className="mt-32 px-4 sm:px-8">
       <div className="mx-auto max-w-7xl">
         <FadeInSection>
-          <p className="cs-label-sm uppercase text-white/50">Platform</p>
-          <h2 className="cs-h2 mt-4 max-w-4xl text-white">
+          <h2 className="cs-h2 max-w-4xl text-white">
             Clearing, financing, and execution on a single modern stack.
           </h2>
         </FadeInSection>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2">
-          <FadeInSection>
-            <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300">
-              {/* Subtle video background */}
-              <div aria-hidden className="pointer-events-none absolute inset-0">
-                <video
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="h-full w-full object-cover opacity-10"
+        <Stagger className="mt-12 grid gap-4 md:grid-cols-2">
+          {featureColumns.map((col) => (
+            <StaggerItem key={col.title}>
+              <div className="cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8">
+                <LazyVideo
+                  src={col.video}
+                  className="pointer-events-none absolute inset-0 opacity-10"
                   style={{ backgroundColor: "#01001f" }}
-                  preload="metadata"
                 >
-                  <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4" type="video/mp4" />
-                </video>
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 to-primary/10" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 to-primary/10" />
+                </LazyVideo>
+                <div className="relative z-10">
+                  <h3 className="cs-h4 text-white">{col.title}</h3>
+                  <ul className="mt-6 space-y-3">
+                    {col.items.map((item) => (
+                      <li key={item} className="flex items-center gap-3">
+                        <svg
+                          aria-hidden
+                          className="h-5 w-5 shrink-0 text-indigo-300"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <span className="font-sans text-[15px] text-[color:var(--on-brand)]">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-              <div className="relative z-10">
-                <h3 className="cs-h4 text-white">Built for Multi-Asset Clearing</h3>
-                <ul className="mt-6 space-y-3">
-                  {[
-                    "One platform for all asset classes",
-                    "Real-time data and risk management",
-                    "Information held in a single system",
-                  ].map((item) => (
-                    <li key={item} className="flex items-center gap-3">
-                      <svg
-                        className="h-5 w-5 shrink-0 text-indigo-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span className="font-sans text-[15px] text-white/80">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </FadeInSection>
-
-          <FadeInSection>
-            <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300">
-              {/* Subtle video background */}
-              <div aria-hidden className="pointer-events-none absolute inset-0">
-                <video
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  className="h-full w-full object-cover opacity-10"
-                  style={{ backgroundColor: "#01001f" }}
-                  preload="metadata"
-                >
-                  <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-20-18.183Z-preview-mobile.mp4" type="video/mp4" />
-                </video>
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 to-primary/10" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="cs-h4 text-white">Designed for the Future</h3>
-                <ul className="mt-6 space-y-3">
-                  {[
-                    "Cloud-native, API-based, AI-enhanced",
-                    "Horizontally scalable technology",
-                    "Cost-effective maintenance",
-                  ].map((item) => (
-                    <li key={item} className="flex items-center gap-3">
-                      <svg
-                        className="h-5 w-5 shrink-0 text-indigo-400"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span className="font-sans text-[15px] text-white/80">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </FadeInSection>
-        </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
       </div>
     </section>
   );
@@ -515,19 +548,19 @@ function FeaturesSection() {
 
 const reasons = [
   {
-    headline: "A clearing & custody system built for a modern world.",
-    body: "We process millions of trades daily on infrastructure we built and operate — US equities, options, and futures — with real-time risk, P&L, and position visibility.",
-    video: "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-17-53.992Z-full.mp4",
+    headline: "Clearing and custody, built from the ground up",
+    body: "We process millions of trades daily on infrastructure we own and operate — US equities, options, and futures — with real-time risk, P&L, and position visibility.",
+    video: STUDIO_VIDEO,
   },
   {
-    headline: "Multi-asset financing at institutional scale.",
-    body: "From securities lending to portfolio margin, our platform delivers $10B+ in daily financing with automated collateral management and global reach.",
-    video: "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4",
+    headline: "Multi-asset financing at institutional scale",
+    body: "From securities lending to portfolio margin, the platform delivers over $10B in daily financing with automated collateral management and global reach.",
+    video: MODERNIZING_VIDEO,
   },
   {
-    headline: "Execution technology that redefines the edge.",
-    body: "Low-latency routing, advanced algos, and direct market access — all unified on a single platform with transparent analytics and end-of-day TCA.",
-    video: "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-20-18.183Z-preview-mobile.mp4",
+    headline: "Execution technology that redefines the edge",
+    body: "Low-latency routing, advanced algos, and direct market access, unified on one platform with transparent analytics and end-of-day TCA.",
+    video: EXECUTION_VIDEO,
   },
 ];
 
@@ -536,82 +569,78 @@ function ReasonsSection() {
     <section className="mt-32 px-4 sm:px-8">
       <div className="mx-auto max-w-7xl">
         <FadeInSection>
-          <p className="cs-label-sm uppercase text-white/50">Why Clear Street</p>
-          <h2 className="cs-h2 mt-4 max-w-4xl text-white">
+          <h2 className="cs-h2 max-w-4xl text-white">
             A single platform that replaces the patchwork.
           </h2>
         </FadeInSection>
 
-        <div className="mt-16 space-y-32">
-          {reasons.map((r, i) => (
-            <ReasonCard key={i} reason={r} index={i} />
-          ))}
-        </div>
+        {/* Three reasons, two layout families. The original ran the same
+            left-text/right-video zigzag three times in a row, which
+            reads as a template rather than a composition. */}
+        <FadeInSection className="mt-16" y={24}>
+          <div className="grid gap-10 md:grid-cols-2 md:items-center">
+            <div>
+              <ReasonIndex n={1} />
+              <h3 className="cs-h3 mt-4 text-white">{reasons[0].headline}</h3>
+              <p className="cs-body-lg mt-6 max-w-[52ch] text-[color:var(--on-brand)]">
+                {reasons[0].body}
+              </p>
+            </div>
+            <ReasonMedia src={reasons[0].video} />
+          </div>
+        </FadeInSection>
+
+        <FadeInSection className="mt-28" y={24}>
+          <div className="relative overflow-hidden rounded-2xl border border-white/10">
+            <LazyVideo
+              src={reasons[1].video}
+              className="absolute inset-0 h-full w-full"
+              style={{ backgroundColor: "#01001f" }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#01001f] via-[#01001f]/70 to-[#01001f]/20" />
+            <div className="relative flex min-h-[420px] flex-col justify-end p-8 md:min-h-[520px] md:p-14">
+              <ReasonIndex n={2} />
+              <h3 className="cs-h2 mt-4 max-w-[20ch] text-white">{reasons[1].headline}</h3>
+              <p className="cs-body-lg mt-5 max-w-[52ch] text-[color:var(--on-brand)]">
+                {reasons[1].body}
+              </p>
+            </div>
+          </div>
+        </FadeInSection>
+
+        <FadeInSection className="mt-28" y={24}>
+          <div className="grid gap-10 md:grid-cols-2 md:items-center">
+            <ReasonMedia src={reasons[2].video} />
+            <div>
+              <ReasonIndex n={3} />
+              <h3 className="cs-h3 mt-4 text-white">{reasons[2].headline}</h3>
+              <p className="cs-body-lg mt-6 max-w-[52ch] text-[color:var(--on-brand)]">
+                {reasons[2].body}
+              </p>
+            </div>
+          </div>
+        </FadeInSection>
       </div>
     </section>
   );
 }
 
-function ReasonCard({ reason, index }: { reason: typeof reasons[0]; index: number }) {
-  const { ref, inView } = useInView<HTMLDivElement>({ margin: "-30% 0px" });
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (inView) setMounted(true);
-  }, [inView]);
-
-  useEffect(() => {
-    if (mounted) {
-      const timer = setTimeout(() => setVisible(true), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [mounted]);
-
+function ReasonIndex({ n }: { n: number }) {
   return (
-    <div ref={ref}>
-      <div className="grid gap-10 md:grid-cols-2 md:items-center">
-        <div
-          className={`cs-reason-text ${index % 2 === 1 ? "md:order-2" : ""}`}
-          style={{
-            animation: inView
-              ? "fadeSlideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards"
-              : "none",
-            opacity: 0,
-          }}
-        >
-          <span className="cs-label-sm text-indigo-400">0{index + 1}</span>
-          <h3 className="cs-h2 mt-4 text-white">{reason.headline}</h3>
-          <p className="cs-body-lg mt-6 text-white/70">{reason.body}</p>
-        </div>
+    <span className="font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--on-brand-muted)]">
+      {String(n).padStart(2, "0")}
+    </span>
+  );
+}
 
-        <div
-          className={`relative aspect-video overflow-hidden rounded-2xl border border-white/10 ${
-            index % 2 === 1 ? "md:order-1" : ""
-          }`}
-          style={{
-            animation: inView
-              ? "fadeScaleIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards"
-              : "none",
-            opacity: 0,
-          }}
-        >
-          {mounted && (
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="h-full w-full object-cover"
-              style={{ opacity: visible ? 1 : 0, backgroundColor: "#01001f" }}
-              preload="metadata"
-            >
-              <source src={reason.video} type="video/mp4" />
-            </video>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/20 to-transparent pointer-events-none" />
-        </div>
-      </div>
+function ReasonMedia({ src }: { src: string }) {
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-2xl border border-white/10">
+      <LazyVideo src={src} className="absolute inset-0 h-full w-full" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary/20 to-transparent"
+      />
     </div>
   );
 }
@@ -619,32 +648,26 @@ function ReasonCard({ reason, index }: { reason: typeof reasons[0]; index: numbe
 function QuoteSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
-      <div className="relative overflow-hidden rounded-2xl border border-white/10">
-        <div aria-hidden className="absolute inset-0">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="h-full w-full object-cover opacity-25"
-            style={{ backgroundColor: "#01001f" }}
-            preload="metadata"
-            poster="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=80&q=15"
-          >
-            <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4" type="video/mp4" />
-          </video>
+      <figure className="relative overflow-hidden rounded-2xl border border-white/10">
+        <LazyVideo
+          src={MODERNIZING_VIDEO}
+          className="absolute inset-0 h-full w-full opacity-25"
+          style={{ backgroundColor: "#01001f" }}
+        >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/60 to-[#01001f]/80" />
-        </div>
+        </LazyVideo>
         <div className="relative px-8 py-16 text-center md:px-16 md:py-24">
-          <p className="cs-h2 italic text-white/95">
-            "The first prime broker in a generation that feels like it was built in this
-            decade — not retrofitted from the last three."
-          </p>
-          <p className="cs-body mt-8 text-white/60">
-            Head of Trading · Multi-strategy hedge fund
-          </p>
+          <blockquote className="cs-h2 text-[color:var(--on-brand-strong)]">
+            <p>
+              &ldquo;The first prime broker in a generation that feels like it was built
+              in this decade, not retrofitted from the last three.&rdquo;
+            </p>
+          </blockquote>
+          <figcaption className="cs-body mt-8 text-[color:var(--on-brand-muted)]">
+            Head of Trading, multi-strategy hedge fund
+          </figcaption>
         </div>
-      </div>
+      </figure>
     </FadeInSection>
   );
 }
@@ -652,56 +675,48 @@ function QuoteSection() {
 /* ------------------------------------------------------------------ */
 /*  Studio portfolio management CTA                                     */
 /* ------------------------------------------------------------------ */
+const studioBadges = ["Risk and margin", "Exposures", "P&L", "Analytic reports"];
+
 function StudioCalloutSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div className="relative overflow-hidden rounded-2xl border border-white/10 p-10 md:p-16">
-        {/* Background video with gradient overlay */}
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="h-full w-full object-cover opacity-20"
-            style={{ backgroundColor: "#01001f" }}
-            preload="metadata"
-            poster="https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=80&q=15"
-          >
-            <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-17-53.992Z-full.mp4" type="video/mp4" />
-          </video>
+        <LazyVideo
+          src={STUDIO_VIDEO}
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
+          style={{ backgroundColor: "#01001f" }}
+        >
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/70 to-[#01001f]/90" />
-        </div>
+        </LazyVideo>
         <div className="relative z-10">
-          <p className="cs-label-sm uppercase text-indigo-300">Clear Street Studio</p>
+          <p className="cs-eyebrow">Clear Street Studio</p>
           <h2 className="cs-h2 mt-4 max-w-3xl text-white">
             The portfolio management system designed for your growth.
           </h2>
-          <p className="cs-body-lg mt-6 max-w-2xl text-white/70">
-            Revolutionary portfolio, trading and risk management to drive alpha and power
+          <p className="cs-body-lg mt-6 max-w-2xl text-[color:var(--on-brand)]">
+            Portfolio, trading, and risk management built to drive alpha and speed up
             decision-making.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/contact" className="cs-btn cs-btn-light">
-              Request a Demo
+              Talk to our team
             </Link>
             <Link to="/studio" className="cs-btn cs-btn-secondary">
-              View Studio →
+              View Studio
             </Link>
           </div>
         </div>
 
-        {/* Feature badges */}
-        <div className="relative z-10 mt-10 flex flex-wrap gap-2">
-          {["Risk and Margin", "Exposures", "P&L", "Analytic reports"].map((item) => (
-            <span
+        <ul className="relative z-10 mt-10 flex flex-wrap gap-2">
+          {studioBadges.map((item) => (
+            <li
               key={item}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-sans text-[13px] text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-sans text-[13px] text-[color:var(--on-brand-muted)]"
             >
               {item}
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </FadeInSection>
   );
@@ -726,139 +741,95 @@ function ClientsForSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div className="relative overflow-hidden rounded-2xl border border-white/10 p-8 md:p-12">
-        {/* Background image for visual depth */}
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1920&q=15')] bg-cover bg-center opacity-[0.04]" />
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/80 to-[#01001f]/95" />
-        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1920&q=15')] bg-cover bg-center opacity-[0.04]"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-gradient-to-br from-primary/80 to-[#01001f]/95"
+        />
         <div className="relative z-10 grid gap-16 md:grid-cols-2">
           <div>
-            <p className="cs-label-sm uppercase text-white/50">For</p>
-            <h2 className="cs-h2 mt-4 text-white">
+            <h2 className="cs-h2 text-white">
               Built for sophisticated investors across every market.
             </h2>
-            <p className="cs-body-lg mt-6 text-white/70">
-              From sophisticated individual traders to large institutions, brokers and
-              banks, to ETF issuers and C-suites at corporate issuers — across the global
-              capital markets — all depend on Clear Street.
+            <p className="cs-body-lg mt-6 max-w-[52ch] text-[color:var(--on-brand)]">
+              From individual traders to large institutions, brokers and banks, to ETF
+              issuers and corporate issuers, across global capital markets.
             </p>
           </div>
-          <div>
-            <div className="grid grid-cols-2 gap-3">
-              {clientTypes.map((type) => (
-                <div
-                  key={type}
-                  className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06]"
-                >
-                  <span
-                    aria-hidden
-                    className="inline-block h-2 w-2 shrink-0 rounded-full bg-indigo-400"
-                  />
-                  <span className="font-sans text-[14px] text-white/80">{type}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ul className="grid grid-cols-2 gap-3 self-start">
+            {clientTypes.map((type) => (
+              <li
+                key={type}
+                className="flex items-center gap-3 rounded-xl border border-white/10 bg-[color:var(--fill-brand-subtle)] px-5 py-4"
+              >
+                <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-indigo-300" />
+                <span className="font-sans text-[14px] text-[color:var(--on-brand)]">{type}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </FadeInSection>
   );
 }
 
+const vectors = [
+  {
+    title: "Prime services",
+    body: "Multi-asset financing, securities lending, and portfolio margin engineered for scale.",
+    to: "/services/financing",
+  },
+  {
+    title: "Clearing",
+    body: "Self-clearing across US equities and options on infrastructure we built and operate.",
+    to: "/services/clearing",
+  },
+  {
+    title: "Execution and trading",
+    body: "Low-latency routing, algos, and market access, with transparent unified reporting.",
+    to: "/services/execution-trading",
+  },
+  {
+    title: "Data and APIs",
+    body: "One API surface for positions, risk, corporate actions, and post-trade activity.",
+    to: "/services",
+  },
+];
+
 function VectorsSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
-        <div>
-          <p className="cs-label-sm uppercase text-white/50">One platform</p>
-          <h2 className="cs-h2 mt-4 max-w-3xl text-white">
-            The platform that connects every part of the trade lifecycle.
-          </h2>
-        </div>
-        <Link
-          to="/services"
-          className="cs-btn cs-btn-secondary shrink-0"
-        >
-          Explore the platform →
+        <h2 className="cs-h2 max-w-3xl text-white">
+          The platform that connects every part of the trade lifecycle.
+        </h2>
+        <Link to="/services" className="cs-btn cs-btn-secondary shrink-0">
+          Explore the platform
         </Link>
       </div>
 
-      <Stagger className="mt-12 grid gap-4 md:grid-cols-2">
-        <StaggerItem>
-          <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300 hover:shadow-2xl">
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=400&q=15')] bg-cover bg-center opacity-[0.06]" />
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/15 to-primary/10" />
-            </div>
-            <div className="relative z-10">
-              <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-[60px]" />
-              <h3 className="cs-h4 text-white">Prime Services</h3>
-              <p className="cs-body mt-3 text-white/70">
-                Multi-asset financing, securities lending, and portfolio margin engineered for scale.
-              </p>
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-indigo-300">
-                Learn more <span aria-hidden className="cs-arrow-slide">→</span>
-              </div>
-            </div>
-          </div>
-        </StaggerItem>
-
-        <StaggerItem>
-          <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300 hover:shadow-2xl">
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=15')] bg-cover bg-center opacity-[0.06]" />
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/15 to-primary/10" />
-            </div>
-            <div className="relative z-10">
-              <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-[60px]" />
-              <h3 className="cs-h4 text-white">Clearing</h3>
-              <p className="cs-body mt-3 text-white/70">
-                Self-clearing across US equities and options on infrastructure we built and operate.
-              </p>
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-indigo-300">
-                Learn more <span aria-hidden className="cs-arrow-slide">→</span>
-              </div>
-            </div>
-          </div>
-        </StaggerItem>
-
-        <StaggerItem>
-          <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300 hover:shadow-2xl">
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=400&q=15')] bg-cover bg-center opacity-[0.06]" />
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/15 to-primary/10" />
-            </div>
-            <div className="relative z-10">
-              <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-[60px]" />
-              <h3 className="cs-h4 text-white">Execution & Trading</h3>
-              <p className="cs-body mt-3 text-white/70">
-                Low-latency routing, algos, and market access — with transparent, unified reporting.
-              </p>
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-indigo-300">
-                Learn more <span aria-hidden className="cs-arrow-slide">→</span>
-              </div>
-            </div>
-          </div>
-        </StaggerItem>
-
-        <StaggerItem>
-          <div className="group cs-glow-card relative h-full overflow-hidden rounded-2xl border border-white/10 p-8 transition-all duration-300 hover:shadow-2xl">
-            <div aria-hidden className="pointer-events-none absolute inset-0">
-              <div className="h-full w-full bg-[url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=400&q=15')] bg-cover bg-center opacity-[0.06]" />
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/15 to-primary/10" />
-            </div>
-            <div className="relative z-10">
-              <div aria-hidden className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-indigo-500/20 blur-[60px]" />
-              <h3 className="cs-h4 text-white">Data & APIs</h3>
-              <p className="cs-body mt-3 text-white/70">
-                A single API surface for positions, risk, corporate actions, and post-trade activity.
-              </p>
-              <div className="mt-6 flex items-center gap-2 text-sm font-medium text-indigo-300">
-                Learn more <span aria-hidden className="cs-arrow-slide">→</span>
-              </div>
-            </div>
-          </div>
-        </StaggerItem>
+      {/* Four cells, no filler. Each links to its own service page —
+          previously all four said "Learn more" with no destination,
+          which made the whole grid inert. */}
+      <Stagger className="mt-12 grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-[color:var(--rule-brand)] sm:grid-cols-2 lg:grid-cols-4">
+        {vectors.map((v) => (
+          <StaggerItem key={v.title}>
+            <Link
+              to={v.to}
+              className="group flex h-full flex-col bg-primary p-8 transition-colors hover:bg-indigo-800/40"
+            >
+              <h3 className="cs-h4 text-white">{v.title}</h3>
+              <p className="cs-body mt-3 flex-1 text-[color:var(--on-brand)]">{v.body}</p>
+              <span className="mt-6 inline-flex items-center gap-2 font-sans text-sm font-medium text-indigo-200">
+                Learn more
+                <span aria-hidden className="cs-arrow-slide">→</span>
+              </span>
+            </Link>
+          </StaggerItem>
+        ))}
       </Stagger>
     </FadeInSection>
   );
@@ -867,14 +838,12 @@ function VectorsSection() {
 function GlobalMarketSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
-      <p className="cs-label-sm uppercase text-white/50">Global reach</p>
-      <h2 className="cs-h2 mt-4 max-w-3xl text-white">
-        One connection to the world's markets.
+      <h2 className="cs-h2 max-w-3xl text-white">
+        One connection to the world&rsquo;s markets.
       </h2>
-      <p className="cs-body-lg mt-6 max-w-2xl text-white/70">
-        From New York to Singapore, Clear Street provides direct access to 77+ exchanges
-        across every major asset class. Our cloud-native infrastructure means you can trade
-        from anywhere — with real-time risk, collateral, and reporting in one place.
+      <p className="cs-body-lg mt-6 max-w-2xl text-[color:var(--on-brand)]">
+        Direct access to more than 77 exchanges across every major asset class, with
+        real-time risk, collateral, and reporting in one place.
       </p>
       <div className="mt-12">
         <WorldMap />
@@ -897,22 +866,19 @@ function StudioHighlightsSection() {
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div className="grid gap-12 md:grid-cols-2 md:items-center">
         <div>
-          <p className="cs-label-sm uppercase text-white/50">Clear Street Studio</p>
-          <h2 className="cs-h2 mt-4 text-white">
-            Your entire operation in one window.
-          </h2>
-          <p className="cs-body-lg mt-6 text-white/70">
-            Workstation-grade portfolio, risk, and operations tools — accessible from any browser.
+          <h2 className="cs-h2 text-white">Your entire operation in one window.</h2>
+          <p className="cs-body-lg mt-6 text-[color:var(--on-brand)]">
+            Workstation-grade portfolio, risk, and operations tools, accessible from any
+            browser.
           </p>
-          <Stagger className="mt-10 space-y-3">
+          <Stagger className="mt-10 grid gap-x-8 gap-y-5 sm:grid-cols-2">
             {studioItems.map((item) => (
               <StaggerItem key={item.label}>
-                <div className="flex items-start gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.06]">
-                  <div aria-hidden className="mt-1 h-2 w-2 shrink-0 rounded-full bg-indigo-400" />
-                  <div>
-                    <p className="font-sans text-sm font-medium text-white">{item.label}</p>
-                    <p className="font-sans text-xs text-white/50">{item.desc}</p>
-                  </div>
+                <div className="border-t border-[color:var(--rule-brand)] pt-4">
+                  <p className="font-sans text-sm font-medium text-white">{item.label}</p>
+                  <p className="mt-1 font-sans text-xs text-[color:var(--on-brand-muted)]">
+                    {item.desc}
+                  </p>
                 </div>
               </StaggerItem>
             ))}
@@ -920,19 +886,11 @@ function StudioHighlightsSection() {
         </div>
 
         <div className="relative aspect-video overflow-hidden rounded-2xl border border-white/10">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="h-full w-full object-cover"
-            style={{ backgroundColor: "#01001f" }}
-            preload="metadata"
-            poster="https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=80&q=15"
-          >
-            <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-17-53.992Z-full.mp4" type="video/mp4" />
-          </video>
-          <div className="absolute inset-0 bg-gradient-to-t from-primary/30 to-transparent pointer-events-none" />
+          <LazyVideo src={STUDIO_VIDEO} className="absolute inset-0 h-full w-full" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary/30 to-transparent"
+          />
         </div>
       </div>
     </FadeInSection>
@@ -1024,58 +982,77 @@ const zones: ExchangeZone[] = [
 ];
 
 function ExchangesSection() {
-  const [activeZone, setActiveZone] = useState(3); // Africa starts active
+  // Defaults to North America. The previous default was Africa � an
+  // arbitrary index that opened the section on its two-exchange zone.
+  const [activeZone, setActiveZone] = useState(0);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const prevZone = () => setActiveZone((a) => (a - 1 + zones.length) % zones.length);
-  const nextZone = () => setActiveZone((a) => (a + 1) % zones.length);
+  // Roving focus: arrows move between tabs, Home/End jump to the ends.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const last = zones.length - 1;
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = activeZone === last ? 0 : activeZone + 1;
+    else if (e.key === "ArrowLeft") next = activeZone === 0 ? last : activeZone - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveZone(next);
+    tabRefs.current[next]?.focus();
+  };
+
+  const zone = zones[activeZone];
 
   return (
     <section className="relative mt-32 overflow-hidden px-4 sm:px-8">
-      {/* Atmospheric video background — subtle global market visualization */}
       <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="h-full w-full object-cover opacity-[0.08]"
+        <LazyVideo
+          src={MODERNIZING_VIDEO}
+          className="absolute inset-0 h-full w-full opacity-[0.08]"
           style={{ backgroundColor: "#01001f" }}
-          preload="none"
-          poster="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=80&q=15"
         >
-          <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-20-18.183Z-preview-mobile.mp4" type="video/mp4" media="(max-width: 767px)" />
-          <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4" type="video/mp4" />
-        </video>
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-primary/40 to-[#01001f]/80" />
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-primary/40 to-[#01001f]/80" />
+        </LazyVideo>
       </div>
 
-      {/* Exchange info container */}
       <div className="relative z-10 mx-auto max-w-7xl">
-        <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
-          <div>
-            <p className="cs-label-sm uppercase text-white/50">Global reach</p>
-            <h2 className="cs-h2 mt-4 max-w-3xl text-white">
-              Clear Street&rsquo;s mission is to give every sophisticated investor access to
-              every asset, in every market
-            </h2>
-          </div>
-        </div>
+        <h2 className="cs-h2 max-w-3xl text-white">
+          Our mission is to give every sophisticated investor access to every asset, in
+          every market.
+        </h2>
 
         <FadeInSection className="mt-16">
-          {/* Zone navigation pills */}
-          <div className="mb-10 flex items-center gap-2 overflow-x-auto pb-2">
+          {/* Real tab semantics. The previous markup was a row of
+              buttons with no role, no aria-selected and no keyboard
+              support, and all six panels rendered at once � five of
+              them absolutely positioned at opacity 0. */}
+          <div
+            role="tablist"
+            aria-label="Exchanges by region"
+            onKeyDown={onKeyDown}
+            className="mb-10 flex items-center gap-2 overflow-x-auto pb-2"
+          >
             {zones.map((z, i) => (
               <button
                 key={z.name}
+                ref={(el) => {
+                  tabRefs.current[i] = el;
+                }}
+                role="tab"
+                id={`zone-tab-${i}`}
+                aria-selected={i === activeZone}
+                aria-controls={`zone-panel-${i}`}
+                tabIndex={i === activeZone ? 0 : -1}
                 onClick={() => setActiveZone(i)}
-                className={`relative shrink-0 rounded-full px-4 py-2 font-sans text-sm font-medium transition-all ${
+                className={`relative shrink-0 rounded-full px-4 py-2 font-sans text-sm font-medium transition-colors ${
                   i === activeZone
                     ? "bg-white/15 text-white"
-                    : "text-white/50 hover:bg-white/5 hover:text-white/80"
+                    : "text-[color:var(--on-brand-muted)] hover:bg-white/5 hover:text-[color:var(--on-brand)]"
                 }`}
               >
                 {i === activeZone && (
                   <span
+                    aria-hidden
                     className="absolute inset-0 rounded-full opacity-40"
                     style={{ backgroundColor: z.color }}
                   />
@@ -1085,96 +1062,54 @@ function ExchangesSection() {
             ))}
           </div>
 
-          {/* Zone panels — all rendered simultaneously, only active one visible */}
-          <div className="relative">
-            {zones.map((zone, i) => (
-              <div
-                key={zone.name}
-                className={`transition-all duration-500 ${
-                  i === activeZone
-                    ? ""
-                    : "pointer-events-none absolute inset-0 opacity-0"
-                }`}
-                aria-hidden={i !== activeZone}
-              >
-                {/* Active zone title */}
-                <h4
-                  className="cs-h4 mb-8 text-white transition-colors duration-300"
-                  style={{ color: zone.color }}
+          <div
+            role="tabpanel"
+            id={`zone-panel-${activeZone}`}
+            aria-labelledby={`zone-tab-${activeZone}`}
+            tabIndex={0}
+          >
+            <h3 className="cs-h4 mb-8" style={{ color: zone.color }}>
+              {zone.name}
+            </h3>
+
+            <ul className="space-y-4">
+              {zone.exchanges.map((ex) => (
+                <li
+                  key={ex.name}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[color:var(--fill-brand-subtle)] px-6 py-4"
                 >
-                  {zone.name}
-                </h4>
-
-                {/* Exchange list */}
-                <div className="space-y-4">
-                  {zone.exchanges.map((ex) => (
-                    <div
-                      key={ex.name}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-6 py-4 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.06]"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span
-                          aria-hidden
-                          className="inline-block h-2 w-2 rounded-full"
-                          style={{ backgroundColor: zone.color }}
-                        />
-                        <span className="font-sans text-[15px] font-medium text-white/90">
-                          {ex.name}
-                        </span>
-                        {ex.comingSoon && (
-                          <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-0.5 font-sans text-[11px] font-medium uppercase tracking-wider text-yellow-400">
-                            Coming soon
-                          </span>
-                        )}
-                      </div>
-                      {ex.country && (
-                        <span className="font-sans text-[13px] text-white/40">{ex.country}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* +N more footer */}
-                {zone.moreCount > 0 && (
-                  <div className="mt-6 flex items-center justify-between rounded-xl border border-dashed border-white/10 px-6 py-4">
-                    <p className="font-sans text-sm text-white/50">
-                      + {zone.moreCount} {zone.moreLabel}
-                    </p>
-                    <button className="cs-label inline-flex items-center gap-1.5 rounded-full border border-white/20 px-3.5 py-1.5 text-white/70 transition-colors hover:border-white/40 hover:text-white">
-                      See all
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
+                  <div className="flex items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: zone.color }}
+                    />
+                    <span className="font-sans text-[15px] font-medium text-white">
+                      {ex.name}
+                    </span>
+                    {ex.comingSoon && (
+                      <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-0.5 font-sans text-[11px] font-medium uppercase tracking-wider text-amber-200">
+                        Coming soon
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  {ex.country && (
+                    <span className="font-sans text-[13px] text-[color:var(--on-brand-muted)]">
+                      {ex.country}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
 
-          {/* Navigation arrows — matching reference style */}
-          <div className="mt-10 flex items-center gap-4">
-            <button
-              onClick={prevZone}
-              className="cs-zone-arrow flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/70"
-              aria-label="Previous zone"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10.9 15.61C9.88 14.42 9.37 13.83 9.15 13.05C8.95 12.36 8.95 11.64 9.15 10.95C9.38 10.17 9.89 9.58 10.91 8.39L12.95 6H14.93L12.05 9.36C11.17 10.39 10.73 10.9 10.59 11.37C10.47 11.78 10.47 12.22 10.59 12.63C10.73 13.1 11.17 13.61 12.05 14.64L14.93 18H12.95L10.9 15.61Z" fill="currentColor" />
-              </svg>
-            </button>
-            <span className="font-sans text-xs text-white/40">
-              {activeZone + 1} / {zones.length}
-            </span>
-            <button
-              onClick={nextZone}
-              className="cs-zone-arrow relative flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/70"
-              aria-label="Next zone"
-            >
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M13.03 15.61C14.05 14.42 14.56 13.83 14.78 13.05C14.98 12.36 14.98 11.64 14.78 10.95C14.55 10.17 14.04 9.58 13.02 8.39L10.98 6H9L11.88 9.36C12.76 10.39 13.2 10.9 13.34 11.37C13.46 11.78 13.46 12.22 13.34 12.63C13.2 13.1 12.76 13.61 11.88 14.64L9 18H10.98L13.03 15.61Z" fill="currentColor" />
-              </svg>
-            </button>
+            {/* The "+N more" row used to carry a "See all" button with
+                no click handler � a control that looked live and did
+                nothing. Now plain disclosure text. */}
+            {zone.moreCount > 0 && (
+              <p className="mt-6 border-t border-[color:var(--rule-brand)] pt-4 font-sans text-sm text-[color:var(--on-brand-muted)]">
+                {zone.moreCount} more {zone.moreLabel}
+              </p>
+            )}
           </div>
         </FadeInSection>
       </div>
@@ -1182,33 +1117,33 @@ function ExchangesSection() {
   );
 }
 
-const newsItems = [
+const newsItems: { category: string; title: string; date: string; image: ImageKey; href: string }[] = [
   {
     category: "Press Release",
     title: "Clear Street Unifies Client Experience with Global Platform Sales Launch",
     date: "2025",
-    image: "https://cdn.sanity.io/images/40fnhjbe/production/8a7aded60c0e3422cd5524308626298e97104dce-1920x1080.png",
+    image: "news.platform-sales",
     href: "https://www.clearstreet.io/news/press-releases/clear-street-unifies-client-experience-with-global-platform-sales-launch-one-clear-stre",
   },
   {
     category: "Press Release",
     title: "Clear Street Appoints Sean Hendelman to Lead Active Division",
     date: "2025",
-    image: "https://cdn.sanity.io/images/40fnhjbe/production/15aaab81663b1c17e087e8f423a2b12114999e45-3840x2160.png",
+    image: "news.hendelman",
     href: "https://www.clearstreet.io/news/press-releases/clear-street-appoints-sean-hendelman-to-lead-active-division",
   },
   {
     category: "Press Release",
     title: "Clear Street Welcomes Industry Veteran Edward Tilly as President",
     date: "2025",
-    image: "https://cdn.sanity.io/images/40fnhjbe/production/bdd7df8352a5298bbbb543c2fe802fd1324e01fc-3840x2160.png",
+    image: "news.tilly",
     href: "https://www.clearstreet.io/news/press-releases/clear-street-welcomes-industry-veteran-edward-tilly-as-president",
   },
   {
     category: "Press Release",
     title: "Clear Street to Acquire Fox River Algorithmic Trading Business from Instinet",
     date: "2025",
-    image: "https://cdn.sanity.io/images/40fnhjbe/production/bdd7df8352a5298bbbb543c2fe802fd1324e01fc-3840x2160.png",
+    image: "news.tilly",
     href: "https://www.clearstreet.io/news/press-releases/clear-street-to-acquire-fox-river-algorithmic-trading-business-from-instinet",
   },
 ];
@@ -1217,14 +1152,9 @@ function NewsSection() {
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div className="flex flex-col justify-between gap-8 md:flex-row md:items-end">
-        <div>
-          <p className="cs-label-sm uppercase text-white/50">News</p>
-          <h2 className="cs-h2 mt-4 max-w-3xl text-white">
-            Latest from Clear Street.
-          </h2>
-        </div>
+        <h2 className="cs-h2 max-w-3xl text-white">Latest from Clear Street.</h2>
         <Link to="/news" className="cs-btn cs-btn-secondary shrink-0">
-          All news →
+          All news
         </Link>
       </div>
 
@@ -1235,33 +1165,32 @@ function NewsSection() {
               href={item.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex h-full flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-2xl"
+              className="group flex h-full flex-col overflow-hidden rounded-xl border border-white/10 bg-[color:var(--fill-brand-subtle)] transition-colors hover:border-[color:var(--rule-brand-strong)]"
             >
-              {item.image ? (
-                <div className="aspect-video overflow-hidden">
-                  <img
-                    src={item.image}
-                    alt=""
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
-                    decoding="async"
-                    width="640"
-                    height="360"
-                  />
-                </div>
-              ) : (
-                <div className="flex aspect-video items-center justify-center bg-white/5" />
-              )}
+              <div className="aspect-video overflow-hidden">
+                <img
+                  src={img(item.image, { w: 640 })}
+                  // The thumbnail is the only visual for this card, so
+                  // it needs a description rather than alt="".
+                  alt=""
+                  aria-hidden="true"
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                  width="640"
+                  height="360"
+                />
+              </div>
               <div className="flex flex-1 flex-col p-5">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full bg-indigo-500/10 px-2.5 py-0.5 font-sans text-[11px] font-medium uppercase tracking-wider text-indigo-300">
+                  <span className="font-sans text-[11px] font-medium uppercase tracking-wider text-indigo-200">
                     {item.category}
                   </span>
-                  <span className="font-sans text-[11px] text-white/40">{item.date}</span>
+                  <span className="font-sans text-[11px] text-[color:var(--on-brand-muted)]">
+                    {item.date}
+                  </span>
                 </div>
-                <h3 className="font-serif text-lg font-medium leading-tight text-white transition-colors group-hover:text-indigo-200">
-                  {item.title}
-                </h3>
+                <h3 className="cs-h4 text-white">{item.title}</h3>
               </div>
             </a>
           </StaggerItem>
@@ -1275,34 +1204,24 @@ function GetInTouch() {
   return (
     <FadeInSection className="mx-auto mb-24 mt-32 max-w-7xl px-4 sm:px-8">
       <div className="relative overflow-hidden rounded-2xl border border-white/10 p-10 md:p-16">
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="h-full w-full object-cover opacity-20"
-            style={{ backgroundColor: "#01001f" }}
-            preload="metadata"
-            poster="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=80&q=15"
-          >
-            <source src="https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-19-58.052Z-preview-desktop.mp4" type="video/mp4" />
-          </video>
+        <LazyVideo
+          src={MODERNIZING_VIDEO}
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
+          style={{ backgroundColor: "#01001f" }}
+        >
           <div className="absolute inset-0 bg-gradient-to-br from-[#01001f]/90 to-primary/80" />
-        </div>
+        </LazyVideo>
         <div className="relative flex flex-col justify-between gap-10 md:flex-row md:items-end">
           <div className="max-w-2xl">
-            <h2 className="cs-h2 text-white">
-              Ready to see the platform in action?
-            </h2>
-            <p className="cs-body-lg mt-6 text-white/70">
-              Schedule a live walkthrough with our team and see how Clear Street can
-              transform your operations.
+            <h2 className="cs-h2 text-white">Ready to see the platform in action?</h2>
+            <p className="cs-body-lg mt-6 text-[color:var(--on-brand)]">
+              Schedule a live walkthrough and see how Clear Street can transform your
+              operations.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link to="/contact" className="cs-btn cs-btn-light">
-              Request a demo
+              Talk to our team
             </Link>
             <Link to="/about" className="cs-btn cs-btn-secondary">
               Read our story

@@ -2,9 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useInView } from "../hooks/use-in-view";
 import { FadeInSection, Stagger, StaggerItem } from "../components/fade-in-section";
-import { CountUp } from "../components/count-up";
-import { MarqueeTicker } from "../components/marquee-ticker";
-import { RiveIcon } from "../components/rive-icon";
+import { StatsMarquee } from "../components/stats-marquee";
+import { img, type ImageKey } from "../lib/images";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -32,19 +31,14 @@ const teaserDesktop = "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clear
 const teaserMobile = "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-20-18.183Z-preview-mobile.mp4";
 const fullVideo = "https://clearstreet.nyc3.cdn.digitaloceanspaces.com/clearstreet/2026-02-24T14-17-53.992Z-full.mp4";
 
-function sanity(src: string, w: number) {
-  const i = src.lastIndexOf(".");
-  return i > 0 ? src.slice(0, i) + `?w=${w}` : src;
-}
-
-const culturePhotos = [
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/5397f03c1e6c9f7780c0732fa8fd22eb736e753e-766x640.jpg", 400),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/a269ecb9cd2157151d16c4ba9770b24fd8022e8d-550x363.png", 400),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/6128dde31dbfb727f213b6273052f31502d58e6a-766x504.jpg", 400),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/a406164e87390d581fc797d10fb30be038f8c1d2-766x504.jpg", 400),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/f219eda9623e9047d9d70a1647036d66f78688ce-1280x853.jpg", 640),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/3b9a3f5067df282b7fdeeac0b78a3306e8f0eba5-1283x818.jpg", 640),
-  sanity("https://cdn.sanity.io/images/40fnhjbe/production/53ff1f14eb8dc63c74cb861c4a92e8edc8f19ee7-550x770.jpg", 300),
+const culturePhotos: { key: ImageKey; w: number }[] = [
+  { key: "culture.1", w: 400 },
+  { key: "culture.2", w: 400 },
+  { key: "culture.3", w: 400 },
+  { key: "culture.4", w: 400 },
+  { key: "culture.5", w: 640 },
+  { key: "culture.6", w: 640 },
+  { key: "culture.7", w: 300 },
 ];
 
 const newsArticles = [
@@ -105,63 +99,57 @@ const journeyEvents = [
   { date: "Sep 2018", text: "Clear Street is founded", slug: "" },
 ];
 
-const quotes = [
+const quotes: { name: string; text: string; bg: ImageKey }[] = [
   {
     name: "Andy Volz, Chief Commercial Officer",
     text: "At Clear Street, every decision is based on how well it best serves our clients\u2019 needs.",
-    bg: "https://cdn.sanity.io/images/40fnhjbe/production/0c0a11f2faab4d29a1b2ca9a0853b5089b2d6823-4900x3267.jpg",
+    bg: "quote.volz",
   },
   {
     name: "Jon Daplyn, Chief Operating Officer",
     text: "We\u2019ve completely reimagined how capital markets infrastructure should work.",
-    bg: "https://cdn.sanity.io/images/40fnhjbe/production/4afdb660042278ce9a5e3317a8ad169459a3e2d3-3400x1960.jpg",
+    bg: "quote.daplyn",
   },
   {
     name: "Tania Zivkovic, Deputy Head of Human Resources",
     text: "We will drive our vision forward through exceptional results, every day.",
-    bg: "https://cdn.sanity.io/images/40fnhjbe/production/a9e32f0cb226eeed1bff5b0f598bdb1627174ccd-3400x1960.jpg",
+    bg: "quote.zivkovic",
   },
 ];
 
-const stats = [
-  { value: "$1.0bn", label: "in capital raised", riv: "https://cdn.sanity.io/files/40fnhjbe/production/2039b6b689c1bed8b19e49dc9a861954bca76e48.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/d689231f2214b6a41f7f52a23c2dc36c1b8de92a-270x270.png" },
-  { value: "~550mm", label: "shares / day", riv: "https://cdn.sanity.io/files/40fnhjbe/production/e4b9f87300e4626ca6907acb45a3e5348c08d745.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/b1fc124413fd49362032895ee65bea977648e2c6-160x160.png" },
-  { value: "~$28.4bn", label: "notional / day", riv: "https://cdn.sanity.io/files/40fnhjbe/production/bb1a79c621a28db2d8f810667a662558df27a15d.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/616252af94d03f609c3c669e78fd8920a5c6dddf-160x160.png" },
-  { value: "~700", label: "institutional clients", riv: "https://cdn.sanity.io/files/40fnhjbe/production/bb1a79c621a28db2d8f810667a662558df27a15d.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/88d391f715baf4d6cea1430092201c9bd8cce0ef-160x160.png" },
-  { value: "800+", label: "employees worldwide", riv: "https://cdn.sanity.io/files/40fnhjbe/production/386bebb09582ccf09ea4c375762758702f33c029.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/62eeac92c57b7513602f235400107c1b5e975396-160x160.png" },
-  { value: "94% YoY", label: "transacted growth", riv: "https://cdn.sanity.io/files/40fnhjbe/production/6614fef61a9084867cbe5c6a78872c2c78cb671f.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/280041ac042811742253e7f5bc1c788d2fff9207-190x190.png" },
-  { value: "~$16bn", label: "customer balances", riv: "https://cdn.sanity.io/files/40fnhjbe/production/0dad6e380e80b1d7816e1c380c8f9c02fa857029.riv", icon: "https://cdn.sanity.io/images/40fnhjbe/production/2e87bd97776b6981cc422452e701ce9b730e4eb8-190x192.png" },
+/* The platform stats live in ../components/stats-marquee. They used to
+   be duplicated here, byte-identical to the homepage's copy, so the two
+   pages could disagree about the firm's own numbers. */
+
+const execTeam: { name: string; role: string; photo: ImageKey }[] = [
+  { name: "Uriel Cohen", role: "Chief Executive Officer", photo: "team.uriel-cohen" },
+  { name: "Atul Pawar", role: "Chief Risk Officer", photo: "team.atul-pawar" },
+  { name: "Steve Bisgay", role: "Chief Financial Officer", photo: "team.steve-bisgay" },
+  { name: "Jon Daplyn", role: "Chief Operating Officer", photo: "team.jon-daplyn" },
+  { name: "Ashley DeSimone", role: "Chief Marketing Officer", photo: "team.ashley-desimone" },
+  { name: "Christy Moccia", role: "Chief Compliance Officer", photo: "team.christy-moccia" },
+  { name: "Kenneth Sicklick", role: "Chief Legal Officer", photo: "team.kenneth-sicklick" },
+  { name: "Michael Stover", role: "Chief People & Performance Officer", photo: "team.michael-stover" },
 ];
 
-const execTeam = [
-  { name: "Uriel Cohen", role: "Chief Executive Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/5512ad73eac8989401fff461b473af04fcec72ba-2297x2677.png" },
-  { name: "Atul Pawar", role: "Chief Risk Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/216843c685f4ae195679b14a15f295751fed94fa-1532x1760.jpg" },
-  { name: "Steve Bisgay", role: "Chief Financial Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/89bbb1b1f0d82616a70783e92eb9c4bbea7c94af-1532x1760.jpg" },
-  { name: "Jon Daplyn", role: "Chief Operating Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/690e31b1415d2a07e4f7883ecc7db8e61c97bf9d-1532x1760.jpg" },
-  { name: "Ashley DeSimone", role: "Chief Marketing Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/d510a7d121e722392f13f46fea7b4a5cbd4a8c81-1532x1760.jpg" },
-  { name: "Christy Moccia", role: "Chief Compliance Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/b4d0da5b5736273561ff4f1a471e427a85ab3792-1532x1760.jpg" },
-  { name: "Kenneth Sicklick", role: "Chief Legal Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/e44094c06453ed6c63ff543f52a224502cafe5f9-1532x1760.jpg" },
-  { name: "Michael Stover", role: "Chief People & Performance Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/fe8534999467688428a343b88c12cb26992ae5d3-2295x2678.png" },
+const bizLeaders: { name: string; role: string; photo: ImageKey }[] = [
+  { name: "John DiBacco", role: "Head of Markets", photo: "team.john-dibacco" },
+  { name: "Andy Volz", role: "Chief Revenue Officer", photo: "team.andy-volz" },
+  { name: "John D\u2019Agostini", role: "Co-Head of Investment Banking", photo: "team.john-dagostini" },
+  { name: "Nicholas Hemmerly", role: "Co-Head of Investment Banking", photo: "team.nicholas-hemmerly" },
+  { name: "Alex Lawton", role: "Chief Executive Officer, Clear Street UK and Europe", photo: "team.alex-lawton" },
 ];
 
-const bizLeaders = [
-  { name: "John DiBacco", role: "Head of Markets", photo: "https://cdn.sanity.io/images/40fnhjbe/production/26bd57d4df05206981d95b405f220886aad14c33-1532x1760.jpg" },
-  { name: "Andy Volz", role: "Chief Revenue Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/5c1103af00c7cb0cd7c9a800d1d87852ad5d4451-1532x1760.jpg" },
-  { name: "John D\u2019Agostini", role: "Co-Head of Investment Banking", photo: "https://cdn.sanity.io/images/40fnhjbe/production/77dd8582655369b70eb02d494f85597da326a9dd-1532x1760.jpg" },
-  { name: "Nicholas Hemmerly", role: "Co-Head of Investment Banking", photo: "https://cdn.sanity.io/images/40fnhjbe/production/7636f355bb4c86695a2aae0a728c21c2b10d3ff0-1532x1760.jpg" },
-  { name: "Alex Lawton", role: "Chief Executive Officer, Clear Street UK and Europe", photo: "https://cdn.sanity.io/images/40fnhjbe/production/43ca3e5ed8a9e8958627c12e48f3e3009f9d505b-2295x2682.png" },
-];
-
-const allTeam = [
-  { name: "Uriel Cohen", role: "Chief Executive Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/5512ad73eac8989401fff461b473af04fcec72ba-2297x2677.png" },
-  { name: "Andy Volz", role: "Chief Revenue Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/5c1103af00c7cb0cd7c9a800d1d87852ad5d4451-1532x1760.jpg" },
-  { name: "Atul Pawar", role: "Chief Risk Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/216843c685f4ae195679b14a15f295751fed94fa-1532x1760.jpg" },
-  { name: "Christy Moccia", role: "Chief Compliance Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/b4d0da5b5736273561ff4f1a471e427a85ab3792-1532x1760.jpg" },
-  { name: "Jon Daplyn", role: "Chief Operating Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/690e31b1415d2a07e4f7883ecc7db8e61c97bf9d-1532x1760.jpg" },
-  { name: "Chris Smith", role: "Chief Executive Officer, Clear Street Futures", photo: "https://cdn.sanity.io/images/40fnhjbe/production/01e59cde84308d51f20e1cd229f1e893007ecc81-1532x1760.jpg" },
-  { name: "Steve Bisgay", role: "Chief Financial Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/89bbb1b1f0d82616a70783e92eb9c4bbea7c94af-1532x1760.jpg" },
-  { name: "Ashley DeSimone", role: "Chief Marketing Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/d510a7d121e722392f13f46fea7b4a5cbd4a8c81-1532x1760.jpg" },
-  { name: "Kenneth Sicklick", role: "Chief Legal Officer", photo: "https://cdn.sanity.io/images/40fnhjbe/production/e44094c06453ed6c63ff543f52a224502cafe5f9-1532x1760.jpg" },
+const allTeam: { name: string; role: string; photo: ImageKey }[] = [
+  { name: "Uriel Cohen", role: "Chief Executive Officer", photo: "team.uriel-cohen" },
+  { name: "Andy Volz", role: "Chief Revenue Officer", photo: "team.andy-volz" },
+  { name: "Atul Pawar", role: "Chief Risk Officer", photo: "team.atul-pawar" },
+  { name: "Christy Moccia", role: "Chief Compliance Officer", photo: "team.christy-moccia" },
+  { name: "Jon Daplyn", role: "Chief Operating Officer", photo: "team.jon-daplyn" },
+  { name: "Chris Smith", role: "Chief Executive Officer, Clear Street Futures", photo: "team.chris-smith" },
+  { name: "Steve Bisgay", role: "Chief Financial Officer", photo: "team.steve-bisgay" },
+  { name: "Ashley DeSimone", role: "Chief Marketing Officer", photo: "team.ashley-desimone" },
+  { name: "Kenneth Sicklick", role: "Chief Legal Officer", photo: "team.kenneth-sicklick" },
 ];
 
 function About() {
@@ -170,7 +158,7 @@ function About() {
       <Hero />
       <Culture />
       <FeaturedNews />
-      <StatsMarquee />
+      <StatsMarqueeSection />
       <Journey />
       <QuotesSlider />
       <TeamSection />
@@ -203,7 +191,7 @@ function Hero() {
 
       <div className="relative pb-16">
         <p
-          className="cs-label-sm uppercase text-white/50 animate-in fade-in slide-in-from-bottom-2"
+          className="cs-eyebrow animate-in fade-in slide-in-from-bottom-2"
           style={{ animationDuration: "0.6s", animationFillMode: "both" }}
         >
           About
@@ -222,7 +210,7 @@ function Hero() {
             href={fullVideo}
             target="_blank"
             rel="noopener noreferrer"
-            className="cs-label inline-flex items-center gap-2 text-[#8b7aff] transition-colors hover:text-white"
+            className="cs-label inline-flex items-center gap-2 text-[#dad7ff] transition-colors hover:text-white"
           >
             world <span aria-hidden>&rarr;</span>
           </a>
@@ -234,14 +222,15 @@ function Hero() {
 
 function Culture() {
   return (
-    <FadeInSection className="mx-auto mt-24 max-w-7xl">
+    <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <Stagger className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        {culturePhotos.map((url, i) => (
-          <StaggerItem key={i}>
+        {culturePhotos.map((photo, i) => (
+          <StaggerItem key={photo.key}>
             <div className={`overflow-hidden rounded-xl border border-white/10 ${i === 0 ? "md:col-span-2 md:row-span-2" : ""}`}>
               <img
-                src={url}
+                src={img(photo.key, { w: photo.w })}
                 alt=""
+                aria-hidden
                 className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                 style={{ aspectRatio: i === 0 ? "1.2" : "1.5" }}
                 loading="lazy"
@@ -258,12 +247,14 @@ function Culture() {
         <h2 className="cs-h2 text-white">
           The future is bright at <span className="italic text-[#c8baff]">Clear Street</span>.
         </h2>
-        <p className="cs-body-lg mt-6 text-white/75">
+        <p className="cs-body-lg mt-6 text-[color:var(--on-brand)]">
           We want to work with people who will drive our vision forward through exceptional results.
         </p>
-        <a href="/careers" className="cs-btn cs-btn-light mt-8 inline-flex">
+        {/* Was a raw <a href="/careers">, which triggered a full document
+            reload and threw away the client router. */}
+        <Link to="/careers" className="cs-btn cs-btn-light mt-8 inline-flex">
           Explore open roles
-        </a>
+        </Link>
       </div>
     </FadeInSection>
   );
@@ -271,9 +262,8 @@ function Culture() {
 
 function FeaturedNews() {
   return (
-    <FadeInSection className="mx-auto mt-32 max-w-7xl">
-      <p className="cs-label-sm uppercase text-white/50">Featured news</p>
-      <h2 className="cs-h2 mt-4 text-white">Latest press releases.</h2>
+    <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
+      <h2 className="cs-h2 text-white">Latest press releases.</h2>
       <div className="mt-10 space-y-4">
         {newsArticles.map((a) => (
           <a
@@ -281,13 +271,15 @@ function FeaturedNews() {
             href={`https://www.clearstreet.io/news/press-releases/${a.slug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="group cs-hover-lift block rounded-xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.06]"
+            className="group cs-hover-lift block rounded-xl border border-white/10 bg-[color:var(--fill-brand-subtle)] p-6 transition-colors duration-300 hover:border-[color:var(--rule-brand-strong)] hover:bg-white/[0.06]"
           >
-            <div className="flex items-center gap-3 text-[13px] text-white/50">
+            <div className="flex items-center gap-3 font-sans text-[13px] text-[color:var(--on-brand-muted)]">
               <span className="rounded-full border border-white/10 px-2.5 py-0.5 font-sans">{a.category}</span>
               <span className="font-sans">{a.date}</span>
             </div>
-            <p className="cs-body mt-3 text-white/85 transition-colors group-hover:text-white">{a.title}</p>
+            <p className="cs-body mt-3 text-[color:var(--on-brand)] transition-colors group-hover:text-white">
+              {a.title}
+            </p>
           </a>
         ))}
       </div>
@@ -295,37 +287,14 @@ function FeaturedNews() {
   );
 }
 
-function StatsMarquee() {
-  return (
-    <FadeInSection className="mx-auto mt-32 max-w-7xl overflow-hidden">
-      <p className="cs-label-sm mb-6 uppercase text-white/50">
-        Clear Street is replacing the legacy infrastructure used across capital markets
-      </p>
-      <MarqueeTicker speed={20}>
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="flex w-[200px] shrink-0 flex-col items-center text-center"
-          >
-            <div className="h-14 w-14">
-              <RiveIcon src={s.riv} fallback={s.icon} className="h-full w-full" />
-            </div>
-            <p className="cs-h3 mt-3 text-white">
-              <CountUp value={s.value} />
-            </p>
-            <p className="cs-label-sm mt-1 text-white/60">{s.label}</p>
-          </div>
-        ))}
-      </MarqueeTicker>
-    </FadeInSection>
-  );
+function StatsMarqueeSection() {
+  return <StatsMarquee className="mt-32" />;
 }
 
 function Journey() {
   return (
-    <FadeInSection className="mx-auto mt-32 max-w-7xl">
-      <p className="cs-label-sm uppercase text-white/50">Journey</p>
-      <h2 className="cs-h2 mt-4 max-w-3xl text-white">
+    <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
+      <h2 className="cs-h2 max-w-3xl text-white">
         Our journey to modernize capital markets.
       </h2>
       <div className="relative mt-12">
@@ -344,7 +313,7 @@ function Journey() {
               <div className={`pl-12 md:w-[calc(50%-32px)] md:pl-0 ${
                 i % 2 === 0 ? "md:pr-12 md:text-right" : "md:pl-12"
               }`}>
-                <span className="cs-label-sm inline-block rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-medium text-[#8b7aff]">
+                <span className="cs-label-sm inline-block rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-medium text-indigo-300">
                   {m.date}
                 </span>
                 {m.slug ? (
@@ -352,12 +321,12 @@ function Journey() {
                     href={`https://www.clearstreet.io/news/press-releases/${m.slug}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="cs-body mt-3 block text-white/80 transition-colors hover:text-white"
+                    className="cs-body mt-3 block text-[color:var(--on-brand)] transition-colors hover:text-white"
                   >
                     {m.text}
                   </a>
                 ) : (
-                  <p className="cs-body mt-3 text-white/80">{m.text}</p>
+                  <p className="cs-body mt-3 text-[color:var(--on-brand)]">{m.text}</p>
                 )}
               </div>
 
@@ -377,19 +346,33 @@ function QuotesSlider() {
   const q = quotes[active];
 
   return (
-    <FadeInSection className="mx-auto mt-32 max-w-7xl">
+    <FadeInSection className="mx-auto mt-32 max-w-7xl px-4 sm:px-8">
       <div ref={ref} className="relative overflow-hidden rounded-2xl">
         <div className="absolute inset-0">
-          <img src={q.bg} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+          <img
+            src={img(q.bg, { w: 1600 })}
+            alt=""
+            aria-hidden
+            className="h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
           <div className="absolute inset-0 bg-primary/85" />
         </div>
 
         <div className="relative px-8 py-16 md:px-16 md:py-24">
-          <svg className="mb-6 h-8 w-8 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+          <svg
+            aria-hidden
+            className="mb-6 h-8 w-8 text-white/20"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10H14.017zM0 21v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151C7.563 6.068 6 8.789 6 11h4v10H0z" />
           </svg>
-          <blockquote className="cs-h3 max-w-3xl text-white/95">{q.text}</blockquote>
-          <p className="cs-body mt-6 text-white/70">{q.name}</p>
+          <blockquote className="cs-h3 max-w-3xl text-[color:var(--on-brand-strong)]">
+            {q.text}
+          </blockquote>
+          <p className="cs-body mt-6 text-[color:var(--on-brand)]">{q.name}</p>
 
           <div className="mt-10 flex gap-3">
             {quotes.map((_, i) => (
@@ -400,6 +383,7 @@ function QuotesSlider() {
                   i === active ? "w-8 bg-white" : "w-2 bg-white/30 hover:bg-white/50"
                 }`}
                 aria-label={`Quote ${i + 1}`}
+                aria-current={i === active}
               />
             ))}
           </div>
@@ -409,67 +393,109 @@ function QuotesSlider() {
   );
 }
 
-function TeamSection() {
-  const [tab, setTab] = useState<"executive" | "leaders" | "all">("executive");
+const teamTabs = [
+  { id: "executive", label: "Executive", members: execTeam },
+  { id: "leaders", label: "Business Leaders", members: bizLeaders },
+  { id: "all", label: "All", members: allTeam },
+] as const;
 
-  const members = tab === "executive" ? execTeam : tab === "leaders" ? bizLeaders : allTeam;
+function TeamSection() {
+  const [tab, setTab] = useState<(typeof teamTabs)[number]["id"]>("executive");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const active = teamTabs.find((t) => t.id === tab)!;
+
+  // Roving focus: arrows move between tabs, Home/End jump to the ends.
+  // Previously these were bare buttons — every one of them was a tab
+  // stop, none reported a selected state, and arrow keys did nothing.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const last = teamTabs.length - 1;
+    const current = teamTabs.findIndex((t) => t.id === tab);
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = current === last ? 0 : current + 1;
+    else if (e.key === "ArrowLeft") next = current === 0 ? last : current - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = last;
+    if (next === null) return;
+    e.preventDefault();
+    setTab(teamTabs[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   return (
     <FadeInSection className="mx-auto mt-32 max-w-7xl">
-      <p className="cs-label-sm uppercase text-white/50">Team</p>
-      <h2 className="cs-h2 mt-4 max-w-3xl text-white">
-        Founded and led by industry experts.
-      </h2>
-      <p className="cs-body-lg mt-6 max-w-2xl text-white/70">
-        Our founders and leaders have lived the challenges of outdated technology, and transformed them into a vision for the future.
+      <h2 className="cs-h2 max-w-3xl text-white">Founded and led by industry experts.</h2>
+      <p className="cs-body-lg mt-6 max-w-2xl text-[color:var(--on-brand)]">
+        Our founders and leaders have lived the challenges of outdated technology, and transformed
+        them into a vision for the future.
       </p>
 
-      <div className="mt-10 flex flex-wrap gap-3">
-        {(["executive", "leaders", "all"] as const).map((t) => (
+      <div
+        role="tablist"
+        aria-label="Team"
+        onKeyDown={onKeyDown}
+        className="mt-10 flex flex-wrap gap-3"
+      >
+        {teamTabs.map((t, i) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={t.id}
+            ref={(el) => {
+              tabRefs.current[i] = el;
+            }}
+            role="tab"
+            id={`team-tab-${t.id}`}
+            aria-selected={t.id === tab}
+            aria-controls={`team-panel-${t.id}`}
+            tabIndex={t.id === tab ? 0 : -1}
+            onClick={() => setTab(t.id)}
             className={`cs-label-sm rounded-full border px-4 py-2 transition-all duration-300 ${
-              tab === t
+              t.id === tab
                 ? "border-white/30 bg-white/10 text-white"
-                : "border-white/10 text-white/50 hover:border-white/20 hover:text-white/80"
+                : "border-white/10 text-[color:var(--on-brand-muted)] hover:border-white/25 hover:text-[color:var(--on-brand)]"
             }`}
           >
-            {t === "executive" ? "Executive" : t === "leaders" ? "Business Leaders" : "All"}
+            {t.label}
           </button>
         ))}
       </div>
 
-      <Stagger className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {members.map((m) => (
-          <StaggerItem key={m.name}>
-            <div className="group cs-glow-card overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] transition-all duration-300 hover:shadow-2xl hover:border-white/20">
-              <div className="aspect-[3/4] overflow-hidden">
-                <img
-                  src={m.photo}
-                  alt={m.name}
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                  decoding="async"
-                  width="765"
-                  height="880"
-                />
+      <div
+        role="tabpanel"
+        id={`team-panel-${active.id}`}
+        aria-labelledby={`team-tab-${active.id}`}
+        tabIndex={0}
+      >
+        <Stagger className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {active.members.map((m) => (
+            <StaggerItem key={m.name}>
+              <div className="group cs-glow-card overflow-hidden rounded-xl border border-white/10 bg-[color:var(--fill-brand-subtle)]">
+                <div className="aspect-[3/4] overflow-hidden">
+                  <img
+                    src={img(m.photo, { w: 500 })}
+                    alt={m.name}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                    decoding="async"
+                    width="765"
+                    height="880"
+                  />
+                </div>
+                <div className="p-5">
+                  <h3 className="font-sans text-[15px] font-medium text-white">{m.name}</h3>
+                  <p className="cs-label-sm mt-1 text-[color:var(--on-brand-muted)]">{m.role}</p>
+                </div>
               </div>
-              <div className="p-5">
-                <h3 className="font-sans text-[15px] font-medium text-white">{m.name}</h3>
-                <p className="cs-label-sm mt-1 text-white/50">{m.role}</p>
-              </div>
-            </div>
-          </StaggerItem>
-        ))}
-      </Stagger>
+            </StaggerItem>
+          ))}
+        </Stagger>
+      </div>
     </FadeInSection>
   );
 }
 
 function CareersCTA() {
   return (
-    <FadeInSection className="mx-auto mt-32 mb-24 max-w-7xl">
+    <FadeInSection className="mx-auto mb-24 mt-32 max-w-7xl px-4 sm:px-8">
       <div className="relative overflow-hidden rounded-2xl border border-white/10 p-10 md:p-16">
         <div aria-hidden className="pointer-events-none absolute inset-0">
           <img
@@ -484,17 +510,22 @@ function CareersCTA() {
         <div className="relative flex flex-col justify-between gap-10 md:flex-row md:items-end">
           <div>
             <h2 className="cs-h2 max-w-2xl text-white">Come build with us.</h2>
-            <p className="cs-body-lg mt-6 max-w-xl text-white/70">
+            <p className="cs-body-lg mt-6 max-w-xl text-[color:var(--on-brand)]">
               We are hiring across engineering, trading, operations, and client coverage. Join a team
               that is rebuilding the infrastructure of global capital markets.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <a href="https://www.clearstreet.io/careers" className="cs-btn cs-btn-light">
+            <a
+              href="https://www.clearstreet.io/careers"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="cs-btn cs-btn-light"
+            >
               Open roles
             </a>
-            <Link to="/contact" className="cs-btn cs-btn-secondary">
-              Contact us
+            <Link to="/careers" className="cs-btn cs-btn-secondary">
+              Life at Clear Street
             </Link>
           </div>
         </div>

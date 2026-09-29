@@ -85,7 +85,7 @@ export function Preloader() {
               }}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="font-sans text-[10px] uppercase tracking-widest text-white/40">
+                <span className="font-sans text-[10px] uppercase tracking-widest text-[color:var(--on-brand-muted)]">
                   {d.label}
                 </span>
                 <span
@@ -122,7 +122,7 @@ export function Preloader() {
       >
         <ClearStreetLogo variant="white" showText={true} className="h-10 w-auto" />
         <p
-          className="mt-3 font-sans text-[10px] uppercase tracking-[0.25em] text-white/25"
+          className="mt-3 font-sans text-[10px] uppercase tracking-[0.25em] text-[color:var(--on-brand-muted)]"
           style={{
             opacity: phase === "intro" ? 0 : 1,
             transition: "opacity 0.5s ease 0.95s",

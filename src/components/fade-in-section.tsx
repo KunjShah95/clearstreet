@@ -1,6 +1,19 @@
-import { type ReactNode, createContext, useContext, useRef } from "react";
-import { useInView } from "../hooks/use-in-view";
+import { type ReactNode, createContext, useContext } from "react";
+import { useInView, usePrefersReducedMotion } from "../hooks/use-in-view";
 
+/**
+ * Scroll reveal.
+ *
+ * The reveal is expressed as a `cs-reveal` class plus an `is-in` modifier
+ * rather than inline `opacity`/`transform`, for two reasons:
+ *
+ *  - The hidden state lives in CSS, so a `<noscript>` override (in
+ *    styles.css) can un-hide everything when JS never runs. Previously
+ *    the inline `opacity: 0` could strand a section at zero opacity
+ *    permanently if IntersectionObserver didn't fire.
+ *  - The end state is the element's natural state, so there is nothing
+ *    to restore if the transition is skipped.
+ */
 export function FadeInSection({
   children,
   className = "",
@@ -25,19 +38,13 @@ export function FadeInSection({
   return (
     <div
       ref={ref}
-      className={className}
-      style={{
-        opacity: clipReveal ? 1 : inView ? 1 : 0,
-        transform: clipReveal ? "none" : inView ? "translateY(0)" : `translateY(${y}px)`,
-        clipPath: clipReveal
-          ? inView
-            ? "inset(0% 0% 0% 0%)"
-            : "inset(8% 0% 8% 0%)"
-          : "none",
-        transition: clipReveal
-          ? `clip-path 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`
-          : `opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`,
-      }}
+      className={`cs-reveal${inView ? " is-in" : ""}${clipReveal ? " cs-reveal-clip" : ""} ${className}`}
+      style={
+        {
+          "--cs-reveal-delay": `${delay}s`,
+          "--cs-reveal-y": `${y}px`,
+        } as React.CSSProperties
+      }
     >
       {children}
     </div>
@@ -54,7 +61,17 @@ const StaggerContext = createContext<StaggerContextValue>({
   baseDelay: 0.09,
 });
 
-/** Wrap a grid/list of items; each direct StaggerItem reveals in sequence on scroll. */
+/**
+ * Wrap a grid or list so each direct child reveals in sequence.
+ *
+ * The per-item offset is applied by `nth-child` in styles.css rather
+ * than by reading a sibling index in a ref callback. The previous
+ * implementation set `indexRef.current` inside the ref callback, which
+ * React invokes *after* the style prop has already been evaluated on
+ * that render — so every item computed index 0 and the whole grid
+ * animated in unison. CSS offsets are correct on the first paint and
+ * need no extra render to apply.
+ */
 export function Stagger({
   children,
   className = "",
@@ -72,38 +89,47 @@ export function Stagger({
 
   return (
     <StaggerContext.Provider value={{ inView, baseDelay: staggerDelay }}>
-      <div ref={ref} className={className}>
+      <div
+        ref={ref}
+        className={`cs-stagger${inView ? " is-in" : ""} ${className}`}
+        style={{ "--cs-stagger-step": `${staggerDelay}s` } as React.CSSProperties}
+      >
         {children}
       </div>
     </StaggerContext.Provider>
   );
 }
 
-export function StaggerItem({ children, className = "" }: { children: ReactNode; className?: string }) {
-  const { inView, baseDelay } = useContext(StaggerContext);
-  const indexRef = useRef<number | null>(null);
+export function StaggerItem({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const { inView } = useContext(StaggerContext);
 
+  return <div className={`cs-stagger-item${inView ? " is-in" : ""} ${className}`}>{children}</div>;
+}
+
+/**
+ * Convenience wrapper for the common case: a section that reveals its
+ * heading block and then staggers a grid of children. Kept out of the
+ * two primitives above so their APIs stay minimal.
+ */
+export function StaggerGrid({
+  children,
+  className = "",
+  staggerDelay = 0.09,
+}: {
+  children: ReactNode;
+  className?: string;
+  staggerDelay?: number;
+}) {
+  const reduced = usePrefersReducedMotion();
   return (
-    <div
-      ref={(el) => {
-        if (el && indexRef.current === null) {
-          // Find our index among siblings to create staggered delay
-          const parent = el.parentElement;
-          if (parent) {
-            indexRef.current = Array.from(parent.children).indexOf(el);
-          } else {
-            indexRef.current = 0;
-          }
-        }
-      }}
-      className={className}
-      style={{
-        opacity: inView ? 1 : 0,
-        transform: inView ? "translateY(0)" : "translateY(24px)",
-        transition: `opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${(indexRef.current ?? 0) * baseDelay}s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${(indexRef.current ?? 0) * baseDelay}s`,
-      }}
-    >
+    <Stagger className={className} staggerDelay={reduced ? 0 : staggerDelay}>
       {children}
-    </div>
+    </Stagger>
   );
 }
